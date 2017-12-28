@@ -121,8 +121,8 @@ readsC_3;readsC_2
 
 ## Citing
 
-[Deorowicz, S., Debudaj-Grabysz, A., Gudyś, A., Grabowski, S. (2017) Whisper: Referential mapping via read sorting, bioRxiv]() 
-DOI:
+[Deorowicz, S., Debudaj-Grabysz, A., Gudyś, A., Grabowski, S. (2017) Whisper: Referential mapping via read sorting, bioRxiv](https://www.biorxiv.org/content/early/2017/12/28/240358) DOI: https://doi.org/10.1101/240358  
+
 
 
  
