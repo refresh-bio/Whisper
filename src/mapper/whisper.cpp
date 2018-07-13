@@ -74,16 +74,18 @@ void usage()
 //	cerr << "  -o <value> - approximate amount of RAM in GB (default: " << cmd_params.max_total_memory << "; must be at least equal no. threads, but not less than 8)\n";
 	cerr << "  -out <name> - name of the output file (default: " << cmd_params.project_name << ")\n";
 	cerr << "  -penalty-saturation <value> - no. of sigmas for max. penalty in matching pairs (default: " << cmd_params.penalty_saturation_sigmas << ")\n";
-	cerr << "  -rg <read_group> - complete read group header line, ’\t’ character will be converted to a TAB in the output SAM while the read group ID will be attached to every read (example line: ’@RG\tID:foo\tSM:bar’)\n";
-	cerr << "  -r[s|p] - single or paired-end reads (default: " << (cmd_params.paired_reads ? "paired" : "single") << ")\n";
+	cerr << "  -rg <read_group> - complete read group header line, (example: '@RG\\tID:foo\\tSM:bar')\n"
+		    "                     '\\t' character will be converted to a TAB in the output SAM/BAM,\n"
+			"                      while the read group ID will be attached to every read \n";
+	cerr << "  -r[s|p] - single or paired-end reads <value> (default: " << (cmd_params.paired_reads ? "paired" : "single") << ")\n";
 	cerr << "  -score-discretization-threshold (default: " << cmd_params.score_discretization_threshold << ")\n";
 	cerr << "  -score-match <value> - score for matching symbol (default: " << cmd_params.match_score << ")\n";
 	cerr << "  -score-clipping <value> score for clipping (default: " << cmd_params.clipping_score << ")\n";
 	cerr << "  -score-mismatch <value> - score for mismatching symbol (default: " << cmd_params.mismatch_score << ")\n";
 	cerr << "  -sens <value> - turn on/off sensitive mode (default: " << (bool) cmd_params.sensitive_mode << ")\n";
 	cerr << "  -sens-factor <value> - sensitivity factor (default: " << cmd_params.sensitivity_factor << ")\n";
-	cerr << "  -stdout - use stdout to store the output (default: " << cmd_params.use_stdout << ")\n";
-	cerr << "  -store-BAM - turn on saving in BAM (default: " << (bool)cmd_params.store_BAM << ")\n";
+	cerr << "  -stdout - use stdout to store the output\n";
+	cerr << "  -store-BAM - turn on saving in BAM\n";
 	cerr << "  -t <value> - no. of threads (0-adjust to hardware) (default: " << cmd_params.no_threads << ")\n";
 	cerr << "  -temp <name> - prefix for temporary files (default: " << cmd_params.temp_prefix << ")\n";
 	cerr << "  -x - load complete suffix arrays in main memory (default: " << cmd_params.sa_in_ram << ")\n";
