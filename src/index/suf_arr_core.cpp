@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -99,8 +99,8 @@ void SA_IS(uchar_t* s, uint32_t* SA, uint32_t n, uint32_t K, uint32_t cs, uint32
 	static double redu_ratio = 0;
 	static int64_t sum_n = 0, sum_n1 = 0;
 	
-	cout << level << " ";
-	fflush(stdout);
+	cerr << level << " ";
+	fflush(stderr);
 
 	int64_t i, j;
 	uchar_t* t = (uchar_t*) malloc(n/8+1); // LS-type array in bits
@@ -189,8 +189,8 @@ void SA_IS(uchar_t* s, uint32_t* SA, uint32_t n, uint32_t K, uint32_t cs, uint32
 			SA1[s1[i]] = (uint32_t) i;
 	}
 
-	cout << level << " ";
-	fflush(stdout);
+	cerr << level << " ";
+	fflush(stderr);
 
 	// stage 3: induce the result for the original problem
 

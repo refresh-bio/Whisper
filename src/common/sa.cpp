@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -192,8 +192,6 @@ bool CSuffixArray::GetSAPart(uint32_t prefix, uint32_t prefix_len, uint32_t* &da
 // ************************************************************************************
 bool CSuffixArray::ReleaseSAPart(uint32_t* &data)
 {
-//	unique_lock<mutex> lck(mtx);
-	
 	if(!is_valid)
 		return false;
 

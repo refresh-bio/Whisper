@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -27,11 +27,11 @@ bool ref_seq_append(vector<struct seq_desc_t> &seq_desc, char *seq, uint64_t &po
 
 	if(!in)
 	{
-		cout << "Cannot open file: " << file_name << "\n";
+		cerr << "Cannot open file: " << file_name << "\n";
 		return false;
 	}
 
-	cout << "Processing: " << file_name << " ";
+	cerr << "Processing: " << file_name << " ";
 	setvbuf(in, nullptr, _IOFBF, 1 << 24);
 
 	while(!feof(in))
@@ -90,7 +90,7 @@ bool ref_seq_append(vector<struct seq_desc_t> &seq_desc, char *seq, uint64_t &po
 
 			seq[pos+size++] = sym_codes[c];
 			if((size & ((1 << 24) - 1)) == 0)
-				cout << ".";
+				cerr << ".";
 		}
 
 		while(size > 0)
@@ -103,7 +103,7 @@ bool ref_seq_append(vector<struct seq_desc_t> &seq_desc, char *seq, uint64_t &po
 			else
 				break;
 		}
-		cout << "\n";
+		cerr << "\n";
 
 		if(size)
 		{
@@ -123,8 +123,8 @@ bool ref_seq_dir_construct(const string index_name, const vector<string> &ref_se
 {
 	vector<struct seq_desc_t> seq_desc;
 
-	cout << "\n***** Stage 1. Reference sequence construction (direct)\n";
-	cout << "Processing " << ref_seq_names.size() << " file(s)\n";
+	cerr << "\n***** Stage 1. Reference sequence construction (direct)\n";
+	cerr << "Processing " << ref_seq_names.size() << " file(s)\n";
 
 	uint64_t estimated_size = 0;
 
@@ -138,7 +138,7 @@ bool ref_seq_dir_construct(const string index_name, const vector<string> &ref_se
 			fclose(f);
 		}
 	}
-	cout << "Total length of the input files: " << estimated_size << " bytes\n";
+	cerr << "Total length of the input files: " << estimated_size << " bytes\n";
 
 	estimated_size += 2 * BOUNDARY_N_LEN + (ref_seq_names.size() - 1) * SEPARATE_N_LEN;
 
@@ -197,13 +197,13 @@ bool ref_seq_dir_construct(const string index_name, const vector<string> &ref_se
 // Construct rev. comp. reference sequence relating on direct ref. seq.
 bool ref_seq_rc_construct(const string index_name, const string temp_dir)
 {
-	cout << "\n***** Stage 2. Reference sequence construction (rev. comp.)\n";
+	cerr << "\n***** Stage 2. Reference sequence construction (rev. comp.)\n";
 
 	shared_ptr<CMapperFile> in(new CMapperFile(EXT_REF_SEQ_DIR, MARKER_REF_SEQ_DIR));
 
 	if(!in->OpenRead(temp_dir + index_name))
 	{
-		cout << "Cannot open reference sequence (direct)\n";
+		cerr << "Cannot open reference sequence (direct)\n";
 		return false;
 	}
 	int64_t size = in->GetSize();
@@ -211,15 +211,15 @@ bool ref_seq_rc_construct(const string index_name, const string temp_dir)
 	shared_ptr<CMapperFile> out(new CMapperFile(EXT_REF_SEQ_RC, MARKER_REF_SEQ_RC));
 	if(!out->OpenWrite(temp_dir + index_name))
 	{
-		cout << "Cannot create reference sequence (rev. comp.)\n";
+		cerr << "Cannot create reference sequence (rev. comp.)\n";
 		return false;
 	}
 
-	cout << "Reading...\n";
+	cerr << "Reading...\n";
 	shared_ptr<char> ref_seq(new char[size]);
 	in->Read(ref_seq.get(), size);
 
-	cout << "Transforming...\n";
+	cerr << "Transforming...\n";
 	char *ptr = ref_seq.get();
 	for(int64_t i = 0; i < (size+1)/2; ++i)
 	{
@@ -237,7 +237,7 @@ bool ref_seq_rc_construct(const string index_name, const string temp_dir)
 			ptr[size-i-1] = sym_code_N_ref;
 	}
 
-	cout << "Writing...\n";
+	cerr << "Writing...\n";
 	out->Write(ref_seq.get(), size);
 
 	return true;
@@ -247,12 +247,12 @@ bool ref_seq_rc_construct(const string index_name, const string temp_dir)
 // Compact direct reference sequence (2 symbols -> 1 byte)
 bool ref_seq_dir_compact(const string index_name, const string dest_dir, const string temp_dir)
 {
-	cout << "\n***** Stage 3. Reference sequence compaction (direct)\n";
+	cerr << "\n***** Stage 3. Reference sequence compaction (direct)\n";
 
 	shared_ptr<CMapperFile> in(new CMapperFile(EXT_REF_SEQ_DIR, MARKER_REF_SEQ_DIR));
 	if(!in->OpenRead(temp_dir + index_name))
 	{
-		cout << "Cannot open reference sequence (direct)\n";
+		cerr << "Cannot open reference sequence (direct)\n";
 		return false;
 	}
 	int64_t size = in->GetSize();
@@ -260,21 +260,21 @@ bool ref_seq_dir_compact(const string index_name, const string dest_dir, const s
 	shared_ptr<CMapperFile> out(new CMapperFile(EXT_REF_SEQ_DIR_PCK, MARKER_REF_SEQ_DIR_PCK));
 	if(!out->OpenWrite(dest_dir + index_name))
 	{
-		cout << "Cannot create compacted reference sequence (direct)\n";
+		cerr << "Cannot create compacted reference sequence (direct)\n";
 		return false;
 	}
 
-	cout << "Reading...\n";
+	cerr << "Reading...\n";
 	shared_ptr<char> ref_seq(new char[size+1]);
 	in->Read(ref_seq.get(), size);
 	ref_seq.get()[size] = sym_code_N_ref;
 
-	cout << "Compacting...\n";
+	cerr << "Compacting...\n";
 	char *ptr = ref_seq.get();
 	for(int64_t i = 0; i < (size+1)/2; ++i)
 		ptr[i] = (ptr[2*i] << 4) + ptr[2*i+1];
 
-	cout << "Writing...\n";
+	cerr << "Writing...\n";
 	out->Write(ref_seq.get(), (size+1)/2);
 	
 	return true;
@@ -284,12 +284,12 @@ bool ref_seq_dir_compact(const string index_name, const string dest_dir, const s
 // Compact rev. comp. reference sequence (2 symbols -> 1 byte)
 bool ref_seq_rc_compact(const string index_name, const string dest_dir, const string temp_dir)
 {
-	cout << "\n***** Stage 4. Reference sequence compaction (rev. comp.)\n";
+	cerr << "\n***** Stage 4. Reference sequence compaction (rev. comp.)\n";
 
 	shared_ptr<CMapperFile> in(new CMapperFile(EXT_REF_SEQ_RC, MARKER_REF_SEQ_RC));
 	if(!in->OpenRead(temp_dir + index_name))
 	{
-		cout << "Cannot open reference sequence (rev. comp.)\n";
+		cerr << "Cannot open reference sequence (rev. comp.)\n";
 		return false;
 	}
 	int64_t size = in->GetSize();
@@ -297,21 +297,21 @@ bool ref_seq_rc_compact(const string index_name, const string dest_dir, const st
 	shared_ptr<CMapperFile> out(new CMapperFile(EXT_REF_SEQ_RC_PCK, MARKER_REF_SEQ_RC_PCK));
 	if(!out->OpenWrite(dest_dir + index_name))
 	{
-		cout << "Cannot create compacted reference sequence (rev. comp.)\n";
+		cerr << "Cannot create compacted reference sequence (rev. comp.)\n";
 		return false;
 	}
 
-	cout << "Reading...\n";
+	cerr << "Reading...\n";
 	shared_ptr<char> ref_seq(new char[size+1]);
 	in->Read(ref_seq.get(), size);
 	ref_seq.get()[size] = sym_code_N_ref;
 
-	cout << "Compacting...\n";
+	cerr << "Compacting...\n";
 	char *ptr = ref_seq.get();
 	for(int64_t i = 0; i < (size+1)/2; ++i)
 		ptr[i] = (ptr[2*i] << 4) + ptr[2*i+1];
 
-	cout << "Writing...\n";
+	cerr << "Writing...\n";
 	out->Write(ref_seq.get(), (size+1)/2);
 
 	return true;

@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cmath>
 #include "../libs/zlib.h"
+#include "../libs/libdeflate.h"
 
 #undef min
 #undef max
@@ -60,8 +61,8 @@ inline T NormalizeValue(T x, T min_value, T max_value)
 inline void Assert(bool condition, const std::string& msg) 
 {
 	if (!condition) {
-		std::cout << msg << std::endl;
-		std::flush(std::cout);
+		std::cerr << msg << std::endl;
+		std::flush(std::cerr);
 		exit(1);
 	}
 }
@@ -78,6 +79,32 @@ void *alloc_aligned(void *&raw_ptr, size_t size, size_t alignment);
 
 typedef uint64_t read_id_t;
 
+// ************************************************************************************
+void StoreUIntLSB(vector<uchar_t> &dest, uint64_t data, uint32_t no_bytes);
+void StoreUInt(uchar_t *dest, uint64_t data, uint32_t no_bytes);
+void StoreUIntLSB(uchar_t *dest, uint64_t data, uint32_t no_bytes);
+void StoreInt32LSB(uchar_t *dest, int32_t data, uint32_t no_bytes);
+void LoadUInt(uchar_t *dest, uint64_t &data, uint32_t no_bytes);
+void LoadUInt2(uchar_t *dest, uint32_t &data);
+void LoadUInt4(uchar_t *dest, uint32_t &data);
+void IncrementUInt(uchar_t *dest, uint32_t no_bytes);
+uint32_t IntLog2(uint64_t x);
+uint32_t IntLog4(uint64_t x);
+string Int2String(uint64_t x);
+string Int2StringFilled(uint64_t x, uint32_t n);
+string FormatInt(uint64_t x);
+int Int2PChar(uint64_t x, uchar_t *str);
+int SInt2PChar(int64_t x, uchar_t *str);
+int SDouble2PChar(double x, uint32_t prec, uchar_t *str);
+
+string NormalizeDirectory(string dir);
+uint32_t Prefix2Int(string prefix);
+
+string StageDesc(uint32_t stage_major, uint32_t stage_minor, bool sensitive_mode = false);
+string StageDesc(uint32_t stage_id);
+
+int64_t FileSize(string file_name);
+
 
 // ************************************************************************************
 // Wrapper for FILE structure. 
@@ -89,7 +116,7 @@ class CMapperFile
 {
 	FILE *file;
 
-	enum class open_mode_t {not_set, closed, opened_for_read, opened_for_write};
+	enum class open_mode_t {not_set, closed, opened_for_read, opened_for_write, direct_stream};
 
 	open_mode_t state;
 
@@ -112,6 +139,7 @@ public:
 	bool SetParams(string _extension, string _marker, uint32_t _element_size = 1);
 	bool OpenRead(string _name);
 	bool OpenWrite(string _name);
+	bool OpenStream(FILE *stream);
 	bool Close();
 	bool Remove();
 
@@ -225,7 +253,7 @@ class CNumericConversions
 
 	static int Double2PChar(double val, uint32_t prec, uchar_t *str)
 	{
-		int64_t a = (int64_t) (val + 0.5);
+		int64_t a = (int64_t) val;
 		int64_t b = (int64_t) ((1.0 + (val - (double) a)) * powers10[prec] + 0.5);
 		
 		int r1 = Int2PChar(a, str);
@@ -328,28 +356,68 @@ public:
 };
 
 // ************************************************************************************
-void StoreUInt(uchar_t *dest, uint64_t data, uint32_t no_bytes);
-void StoreUIntLSB(uchar_t *dest, uint64_t data, uint32_t no_bytes);
-void LoadUInt(uchar_t *dest, uint64_t &data, uint32_t no_bytes);
-void LoadUInt2(uchar_t *dest, uint32_t &data);
-void LoadUInt4(uchar_t *dest, uint32_t &data);
-void IncrementUInt(uchar_t *dest, uint32_t no_bytes);
-uint32_t IntLog2(uint64_t x);
-uint32_t IntLog4(uint64_t x);
-string Int2String(uint64_t x);
-string Int2StringFilled(uint64_t x, uint32_t n);
-string FormatInt(uint64_t x);
-int Int2PChar(uint64_t x, uchar_t *str);
-int SInt2PChar(int64_t x, uchar_t *str);
-int SDouble2PChar(double x, uint32_t prec, uchar_t *str);
+class CBGZF
+{
+	int compression_level;
 
-string NormalizeDirectory(string dir);
-uint32_t Prefix2Int(string prefix);
+	libdeflate_compressor *compressor;
 
-string StageDesc(uint32_t stage_major, uint32_t stage_minor, bool sensitive_mode = false);
-string StageDesc(uint32_t stage_id);
+public:
+	CBGZF(int _compression_level) : compression_level(_compression_level ? _compression_level : 1)
+	{
+		compressor = libdeflate_alloc_compressor(compression_level);
+	}
 
-int64_t FileSize(string file_name);
+	~CBGZF()
+	{
+		libdeflate_free_compressor(compressor);
+	}
+
+	size_t Compress(uchar_t *src, size_t src_size, uchar_t *dest, size_t dest_size)
+	{
+		auto orig_dest = dest;
+
+		*dest++ = 31;			// gzip ID
+		*dest++ = 139;
+		*dest++ = 8;			// compression method
+		*dest++ = 4;			// flags
+		
+		*dest++ = 0;			// time (uint32)
+		*dest++ = 0;
+		*dest++ = 0;
+		*dest++ = 0;
+
+		*dest++ = 0;			// extra flags
+		*dest++ = 0xff;			// OS
+
+		*dest++ = 6;			// extra length (uint16)
+		*dest++ = 0;
+
+		*dest++ = 'B';			// BGZF id
+		*dest++ = 'C';	
+		*dest++ = 2;			// subfield size (uint16)
+		*dest++ = 0;
+
+		auto bsize_ptr = dest;
+		dest += 2;
+
+		auto deflate_size = libdeflate_deflate_compress(compressor, src, src_size, dest, dest_size - (dest - orig_dest) - 8);
+		dest += deflate_size;
+
+		StoreUIntLSB(bsize_ptr, deflate_size + 6 + 19, 2);
+
+		uint32_t crc32 = 0;
+		crc32 = libdeflate_crc32(crc32, src, src_size);
+
+		StoreUIntLSB(dest, crc32, 4);
+		dest += 4;
+
+		StoreUIntLSB(dest, src_size, 4);
+		dest += 4;
+
+		return dest - orig_dest;
+	}
+};
 
 #endif
 

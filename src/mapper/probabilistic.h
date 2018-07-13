@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-11-30
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -78,8 +78,8 @@ protected:
 	{
 		// Abramowitz and Stegun formula 26.2.23.
 		// The absolute value of the error should be less than 4.5 e-4.
-		double c[] = { 2.515517, 0.802853, 0.010328 };
-		double d[] = { 1.432788, 0.189269, 0.001308 };
+		const double c[] = { 2.515517, 0.802853, 0.010328 };
+		const double d[] = { 1.432788, 0.189269, 0.001308 };
 		return t - ((c[2] * t + c[1])*t + c[0]) /
 			(((d[2] * t + d[1])*t + d[0])*t + 1.0);
 	}
@@ -90,9 +90,9 @@ class InsertSizeModel
 {
 protected:
 	scoring_t scoring;
-	int minSamplesCount;
-	int maxSamplesCount;
 	size_t samplesCount;
+	size_t minSamplesCount;
+	size_t maxSamplesCount;
 	double maxPenalty;
 	double penaltySaturationSigmas;
 	double highConfidenceSigmas;
@@ -101,13 +101,13 @@ protected:
 
 public:
 	InsertSizeModel(
-		double mean, double dev, int minSamplesCount, int maxSamplesCount, 
+		double mean, double dev, int minSamplesCount, int maxSamplesCount,
 		double highConfidenceSigmas, double penaltySaturationSigmas,
 		scoring_t scoring)
 		: scoring(scoring),
 		minSamplesCount(minSamplesCount),
-		maxSamplesCount(maxSamplesCount), 
-		samplesCount(1), 
+		maxSamplesCount(maxSamplesCount),
+		samplesCount(0), 
 		penaltySaturationSigmas(penaltySaturationSigmas),
 		highConfidenceSigmas(highConfidenceSigmas),
 		initialDistribution(mean, dev), 
@@ -120,8 +120,6 @@ public:
 	const scoring_t & getScoring() const { return scoring; }
 
 	size_t getMinSamplesCount() const { return minSamplesCount; }
-
-	size_t getMaxSamplesCount() const { return maxSamplesCount; }
 
 	size_t getSamplesCount() const { return samplesCount; }
 
@@ -136,7 +134,8 @@ public:
 	double getMaxPenalty() const { return calculatePenalty(this->mean() - getSaturationDev(), false); }
 
 	void reset() {
-		samplesCount = 1;
+		samplesCount = 0;
+		currentDistibution = initialDistribution;
 	}
 
 	/// Use samples to recalculate internal mean;
@@ -174,23 +173,23 @@ public:
 	}
 
 	virtual double mean() const {
-		return (int) samplesCount < minSamplesCount ? initialDistribution.mean() : currentDistibution.mean();
+		return currentDistibution.mean();
 	}
 
 	virtual double dev() const {
-		return (int) samplesCount < minSamplesCount ? initialDistribution.dev() : currentDistibution.dev();
+		return currentDistibution.dev();
 	}
 
 	virtual double pdf(double x) const {
-		return (int) samplesCount < minSamplesCount ? initialDistribution.pdf(x) : currentDistibution.pdf(x);
+		return currentDistibution.pdf(x);
 	}
 
 	virtual double cdf(double x) const {
-		return (int) samplesCount < minSamplesCount ? initialDistribution.cdf(x) : currentDistibution.cdf(x);
+		return currentDistibution.cdf(x);
 	}
 
 	virtual double invcdf(double x) const {
-		return (int) samplesCount < minSamplesCount ? initialDistribution.invcdf(x) : currentDistibution.invcdf(x);
+		return currentDistibution.invcdf(x);
 	}
 };
 

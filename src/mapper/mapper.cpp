@@ -1,3 +1,14 @@
+// *******************************************************************************************
+// This file is a part of Whisper reads mapper.
+// The homepage of the project is http://sun.aei.polsl.pl/REFRESH/whisper
+// 
+// Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
+// 
+// Version : 1.1
+// Date    : 2018-07-10
+// License : GNU GPL 3
+// *******************************************************************************************
+
 #include "mapper.h"
 #include <sstream>
 #include "../libs/asmlib.h"
@@ -13,7 +24,7 @@ CMapper::CMapper()
 	params.min_read_len = 101;			// minimal length of mapped reads
 	params.max_read_len = 101;			// maximal length of mapped reads
 	params.max_fastq_rec_length = max_fastq_rec_length;	// 10240
-	params.max_cigar_len = 1024;
+	params.max_cigar_len = 4096;
 
 	objects.running_stats = nullptr;
 
@@ -99,7 +110,7 @@ bool CMapper::StartMapping()
 	watch_main.StopTimer();
 	objects.running_stats->AddTotals(STAT_TIME_MAIN, watch_main.GetElapsedTime());
 	if (params.verbosity_level > 0)
-		cout << "Main processing time: " << watch_main.GetElapsedTime() << "s\n";
+		cerr << "Main processing time: " << watch_main.GetElapsedTime() << "s\n";
 
 	if (!params.developer_mode && res)
 	{
@@ -110,8 +121,8 @@ bool CMapper::StartMapping()
 
 		if (params.verbosity_level > 0)
 		{
-			cout << "***** Postprocessing *****\n";
-			fflush(stdout);
+			cerr << "***** Postprocessing *****\n";
+			fflush(stderr);
 		}
 
 		prepare_reference();
@@ -125,7 +136,7 @@ bool CMapper::StartMapping()
 		objects.running_stats->AddTotals(STAT_TIME_POST, watch_post.GetElapsedTime());
 	
 		if (params.verbosity_level > 0)
-			cout << "Postprocessing time: " << watch_post.GetElapsedTime() << "s\n";
+			cerr << "Postprocessing time: " << watch_post.GetElapsedTime() << "s\n";
 		
 	}
 
@@ -252,12 +263,13 @@ bool CMapper::StartPostProcessing()
 
 	if (params.verbosity_level > 0)
 	{
-		cout << "***** Postprocessing *****\n";
-		fflush(stdout);
+		cerr << "***** Postprocessing *****\n";
+		fflush(stderr);
 	}
 
 	prepare_reference();
 	adjust_memory_postprocessing();
+	
 	res = reads_postprocessing(params.mapping_mode);
 	release_reference();
 
@@ -294,13 +306,13 @@ bool CMapper::adjust_threads(bool single_thr_readers)
 
 	if (!params.input_file_names.empty() && no_input_files < params.no_thr_fastq_reader)
 		params.no_thr_fastq_reader = no_input_files;
-	params.no_thr_splitter = params.no_threads - params.no_thr_fastq_reader + 1;
+	params.no_thr_splitter = MAX(params.no_threads - params.no_thr_fastq_reader + 1, 1);
 
 	// Mapping stage
 	params.no_thr_mapping_cores = params.no_threads;
 
 	// SAM production stage
-	params.no_thr_sam_generators = params.no_threads - params.no_threads / 8;
+	params.no_thr_sam_generators = MAX(params.no_threads - params.no_threads / 8, 1);
 
 	return true;
 }
@@ -357,15 +369,15 @@ bool CMapper::adjust_memory_splitting()
 
 	if (params.verbosity_level > 1)
 	{
-		cout << "Max total memory             : " << FormatInt(params.max_total_memory) << "\n";
-		cout << "Memory settings fo splitting stage:\n";
-		cout << "  no. FASTQ blocks per thread: " << FormatInt(params.no_fastq_blocks_per_thread) << "\n";
-		cout << "  mem. per FASTQ blocks      : " << FormatInt((params.block_size + params.block_overhead_size) * params.no_thr_fastq_reader * params.no_fastq_blocks_per_thread) << "\n";
-		cout << "  max bin part size          : " << FormatInt(params.max_bin_part_size) << "\n";
-		cout << "  bin size                   : " << FormatInt(params.bin_size) << "\n";
-		cout << "  no bin parts               : " << FormatInt(params.no_parts) << "\n";
-		cout << "  min. no. free bin parts    : " << FormatInt(params.min_no_free_parts) << "\n";
-		fflush(stdout);
+		cerr << "Max total memory             : " << FormatInt(params.max_total_memory) << "\n";
+		cerr << "Memory settings fo splitting stage:\n";
+		cerr << "  no. FASTQ blocks per thread: " << FormatInt(params.no_fastq_blocks_per_thread) << "\n";
+		cerr << "  mem. per FASTQ blocks      : " << FormatInt((params.block_size + params.block_overhead_size) * params.no_thr_fastq_reader * params.no_fastq_blocks_per_thread) << "\n";
+		cerr << "  max bin part size          : " << FormatInt(params.max_bin_part_size) << "\n";
+		cerr << "  bin size                   : " << FormatInt(params.bin_size) << "\n";
+		cerr << "  no bin parts               : " << FormatInt(params.no_parts) << "\n";
+		cerr << "  min. no. free bin parts    : " << FormatInt(params.min_no_free_parts) << "\n";
+		fflush(stderr);
 	}
 
 	return true;
@@ -437,16 +449,16 @@ bool CMapper::adjust_memory_mapping()
 
 	if (params.verbosity_level > 1)
 	{
-		cout << "Memory settings fo mapping stage:\n";
-		cout << "  max mapping memory       : " << FormatInt(params.max_mapping_memory) << "\n";
-		cout << "  no. result parts         : " << FormatInt(params.no_res_parts) << "\n";
-		cout << "  result group size        : " << FormatInt(params.res_group_size) << "\n";
-		cout << "  min. no. free group parts: " << FormatInt(params.min_no_free_group_parts) << "\n";
-		cout << "  max bin part size        : " << FormatInt(params.max_bin_part_size) << "\n";
-		cout << "  bin part size            : " << FormatInt(params.bin_size) << "\n";
-		cout << "  no. bin parts            : " << FormatInt(params.no_parts) << "\n";
-		cout << "  min. no. free bin parts  : " << FormatInt(params.min_no_free_parts) << "\n";
-		fflush(stdout);
+		cerr << "Memory settings fo mapping stage:\n";
+		cerr << "  max mapping memory       : " << FormatInt(params.max_mapping_memory) << "\n";
+		cerr << "  no. result parts         : " << FormatInt(params.no_res_parts) << "\n";
+		cerr << "  result group size        : " << FormatInt(params.res_group_size) << "\n";
+		cerr << "  min. no. free group parts: " << FormatInt(params.min_no_free_group_parts) << "\n";
+		cerr << "  max bin part size        : " << FormatInt(params.max_bin_part_size) << "\n";
+		cerr << "  bin part size            : " << FormatInt(params.bin_size) << "\n";
+		cerr << "  no. bin parts            : " << FormatInt(params.no_parts) << "\n";
+		cerr << "  min. no. free bin parts  : " << FormatInt(params.min_no_free_parts) << "\n";
+		fflush(stderr);
 	}
 
 	return true;
@@ -467,12 +479,17 @@ bool CMapper::adjust_memory_postprocessing()
 	mem_available -= params.max_fastq_rec_length * params.no_thr_sam_generators * 3 * 4;
 
 	// Memory for CIGAR and MD
-	mem_available -= 3 * params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings;
+	mem_available -= 6 * params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings;
 
 	// Memory for SAM parts
 	params.sam_buffer_memory = 128 << 20;
 	mem_available -= 2 * params.sam_buffer_memory;
-	params.sam_part_size = 16 << 20;
+
+	if (params.store_BAM)
+		params.sam_part_size = 64 << 10;
+	else
+		params.sam_part_size = 64 << 10;
+//		params.sam_part_size = 16 << 20;
 
 	int64_t mem_sam_parts;
 
@@ -496,50 +513,53 @@ bool CMapper::adjust_memory_postprocessing()
 	else
 		params.block_size = 1 << 25;
 
-	for (params.no_fastq_blocks_per_thread = (1 << params.id_bits_subgroup) * 4;
+	params.no_fastq_blocks_per_thread = 1 << params.id_bits_subgroup;
+
+/*	for (params.no_fastq_blocks_per_thread = (1 << params.id_bits_subgroup) * 4;
 		params.no_fastq_blocks_per_thread > (1 << params.id_bits_subgroup) * 2.3;
 		--params.no_fastq_blocks_per_thread)
 	{
 		if (params.verbosity_level > 1)
 		{
-			cout << "No. fastq blocks " << params.no_fastq_blocks_per_thread << "      " << params.id_bits_subgroup << "\n";
-			cout << (params.block_size + params.block_overhead_size) * params.no_fastq_blocks_per_thread * (params.no_thr_fastq_reader + params.no_thr_sam_generators) << "\n";
-			cout << params.block_size << "  " << params.block_overhead_size << "  " << params.no_fastq_blocks_per_thread << "  " << params.no_thr_fastq_reader << "  " << params.no_thr_sam_generators << "\n";
-			cout << mem_available * 0.15 << "\n";
+			cerr << "No. fastq blocks " << params.no_fastq_blocks_per_thread << "      " << params.id_bits_subgroup << "\n";
+			cerr << (params.block_size + params.block_overhead_size) * params.no_fastq_blocks_per_thread * (params.no_thr_fastq_reader + params.no_thr_sam_generators) << "\n";
+			cerr << params.block_size << "  " << params.block_overhead_size << "  " << params.no_fastq_blocks_per_thread << "  " << params.no_thr_fastq_reader << "  " << params.no_thr_sam_generators << "\n";
+			cerr << mem_available * 0.15 << "\n";
 
-			fflush(stdout);
+			fflush(stderr);
 		}
+//		if ((params.block_size + params.block_overhead_size) * params.no_fastq_blocks_per_thread * (params.no_thr_fastq_reader + params.no_thr_sam_generators) < (1ull << 30))
 		if ((params.block_size + params.block_overhead_size) * params.no_fastq_blocks_per_thread * (params.no_thr_fastq_reader + params.no_thr_sam_generators) < (1ull << 30))
 			break;
 	}
 
 	if (params.verbosity_level > 1)
 	{
-		cout << "No. fastq blocks " << params.no_fastq_blocks_per_thread << "   " << (1 << params.id_bits_subgroup) << "\n";
-		fflush(stdout);
+		cerr << "No. fastq blocks " << params.no_fastq_blocks_per_thread << "   " << (1 << params.id_bits_subgroup) << "\n";
+		fflush(stderr);
 	}
-
-	mem_available -= (params.block_size + params.block_overhead_size) * (params.no_thr_fastq_reader + params.no_thr_sam_generators) * params.no_fastq_blocks_per_thread;
+	*/
+/*	mem_available -= (params.block_size + params.block_overhead_size) * (params.no_thr_fastq_reader + params.no_thr_sam_generators) * params.no_fastq_blocks_per_thread;
 	if (mem_available <= 0)
 	{
 		cerr << "To little memory\n";
 		exit(1);
-	}
+	}*/
 
 	// Memory for result groups
-	if (mem_available < ((int64_t) params.no_threads) * (512ll << 20))
-		mem_available = ((int64_t) params.no_threads) * (512ll << 20);
+//	if (mem_available < ((int64_t) params.no_threads) * (1024ll << 20))
+	mem_available = ((int64_t) params.no_threads) * (1024ll << 20);
 	params.max_res_dev_memory = mem_available;
 
 	if (params.verbosity_level > 1)
 	{
-		cout << "Max total memory             : " << FormatInt(params.max_total_memory) << "\n";
-		cout << "Memory settings for postprocessing stage:\n";
-		cout << "  no. FASTQ blocks per thread: " << FormatInt(params.no_fastq_blocks_per_thread) << "\n";
-		cout << "  mem. per FASTQ blocks      : " << FormatInt((params.block_size + params.block_overhead_size) * (params.no_thr_fastq_reader + params.no_thr_sam_generators) * params.no_fastq_blocks_per_thread) << "\n";
-		cout << "  mem for groups delivery    : " << FormatInt(params.max_res_dev_memory) << "\n";
-		cout << "  mem for SAM parts          : " << FormatInt(mem_sam_parts) << "\n";
-		fflush(stdout);
+		cerr << "Max total memory             : " << FormatInt(params.max_total_memory) << "\n";
+		cerr << "Memory settings for postprocessing stage:\n";
+		cerr << "  no. FASTQ blocks per thread: " << FormatInt(params.no_fastq_blocks_per_thread) << "\n";
+		cerr << "  mem. per FASTQ blocks      : " << FormatInt((params.block_size + params.block_overhead_size) * (params.no_thr_fastq_reader + params.no_thr_sam_generators) * params.no_fastq_blocks_per_thread) << "\n";
+		cerr << "  mem for groups delivery    : " << FormatInt(params.max_res_dev_memory) << "\n";
+		cerr << "  mem for SAM parts          : " << FormatInt(mem_sam_parts) << "\n";
+		fflush(stderr);
 	}
 
 	return true;
@@ -669,10 +689,15 @@ bool CMapper::adjust_max_and_min_read_len(vector<uint64_t> &hist_read_len)
 		params.min_read_len = MAX(min_len, (int)(max_len * 0.9));
 	}
 
-	if (params.max_frac_errors > largest_frac_errors)
+	double max_frac_errors = (double)params.max_no_errors / params.min_read_len;
+
+/*	if (params.max_frac_errors > largest_frac_errors)
 		params.max_frac_errors = largest_frac_errors;
 
-	params.max_no_errors = (uint32_t) (params.min_read_len * params.max_frac_errors);
+	params.max_no_errors = (uint32_t) (params.min_read_len * params.max_frac_errors);*/
+
+	if(max_frac_errors > largest_frac_errors)
+		params.max_no_errors = (uint32_t)(params.min_read_len * largest_frac_errors);
 
 	return true;
 }
@@ -689,15 +714,15 @@ bool CMapper::prepare_reference_sa()
 
 	if (params.verbosity_level > 0)
 	{
-		cout << "** Loading reference and index **\n";
-		fflush(stdout);
+		cerr << "** Loading reference and index **\n";
+		fflush(stderr);
 	}
 	res &= objects.reference->SetIndexName(params.index_name);
 
 	if (params.verbosity_level > 1)
 	{
-		cout << "Preparing suffix arrays\n";
-		fflush(stdout);
+		cerr << "Preparing suffix arrays\n";
+		fflush(stderr);
 	}
 	res &= objects.sa_dir->SetIndexName(params.index_name, genome_t::direct);
 	res &= objects.sa_rc->SetIndexName(params.index_name, genome_t::rev_comp);
@@ -730,8 +755,8 @@ bool CMapper::prepare_reference()
 
 	if (params.verbosity_level > 0)
 	{
-		cout << "** Loading reference **\n";
-		fflush(stdout);
+		cerr << "** Loading reference **\n";
+		fflush(stderr);
 	}
 
 	res = objects.reference->SetIndexName(params.index_name);
@@ -901,8 +926,8 @@ bool CMapper::reads_splitting()
 
 	if (params.verbosity_level > 0)
 	{
-		cout << "***** Preprocessing of reads *****\n";
-		fflush(stdout);
+		cerr << "***** Preprocessing of reads *****\n";
+		fflush(stderr);
 	}
 
 	// Prepare pool memory allocators
@@ -958,8 +983,8 @@ bool CMapper::reads_splitting()
 
 	if (params.verbosity_level > 0)
 	{
-		cout << "\nCompleting the preprocessing (could take a minute or so)\n";
-		fflush(stdout);
+		cerr << "\nCompleting the preprocessing (could take a minute or so)\n";
+		fflush(stderr);
 	}
 
 	for (auto &p : thr_rs)
@@ -1015,7 +1040,7 @@ bool CMapper::reads_splitting()
 	objects.running_stats->AddTotals(STAT_TIME_SPLIT, watch.GetElapsedTime());
 
 	if (params.verbosity_level > 0)
-		cout << "Preprocessing time: " << watch.GetElapsedTime() << "s\n";
+		cerr << "Preprocessing time: " << watch.GetElapsedTime() << "s\n";
 
 	return true;
 }
@@ -1030,8 +1055,8 @@ bool CMapper::reads_mapping_first_stratum()
 
 	if (params.verbosity_level > 0)
 	{
-		cout << "***** Reads mapping *****\n";
-		fflush(stdout);
+		cerr << "***** Reads mapping *****\n";
+		fflush(stderr);
 	}
 
 	uint32_t max_stage = params.max_no_errors;
@@ -1096,8 +1121,8 @@ bool CMapper::reads_mapping_first_stratum()
 
 	if (params.verbosity_level > 0)
 	{
-		cout << "** End of mapping **      \n";
-		fflush(stdout);
+		cerr << "** End of mapping **      \n";
+		fflush(stderr);
 	}
 
 	return true;
@@ -1113,8 +1138,8 @@ bool CMapper::reads_mapping_second_stratum()
 
 	if (params.verbosity_level > 0)
 	{
-		cout << "***** Reads mapping *****\n";
-		fflush(stdout);
+		cerr << "***** Reads mapping *****\n";
+		fflush(stderr);
 	}
 
 	uint32_t max_stage = params.max_no_errors;
@@ -1178,8 +1203,8 @@ bool CMapper::reads_mapping_second_stratum()
 
 	if (params.verbosity_level > 0)
 	{
-		cout << "** End of mapping **      \n";
-		fflush(stdout);
+		cerr << "** End of mapping **      \n";
+		fflush(stderr);
 	}
 
 	return true;
@@ -1195,8 +1220,8 @@ bool CMapper::reads_mapping_all_strata()
 
 	if (params.verbosity_level > 0)
 	{
-		cout << "***** Reads mapping *****\n";
-		fflush(stdout);
+		cerr << "***** Reads mapping *****\n";
+		fflush(stderr);
 	}
 
 	uint32_t max_stage = params.max_no_errors;
@@ -1248,8 +1273,8 @@ bool CMapper::reads_mapping_all_strata()
 
 	if (params.verbosity_level > 0)
 	{
-		cout << "End of all strata mapping\n";
-		fflush(stdout);
+		cerr << "End of all strata mapping\n";
+		fflush(stderr);
 	}
 
 	return true;
@@ -1272,25 +1297,45 @@ bool CMapper::reads_postprocessing(mapping_mode_t mapping_mode)
 
 	if (params.verbosity_level > 1)
 	{
-		cout << "** Postprocessing (SAM generation) **\n";
-		fflush(stdout);
+		cerr << "** Postprocessing (SAM generation) **\n";
+		fflush(stderr);
 	}
 
 	// Prepare pool memory allocators
+//	objects.mp_fastq_blocks = new CMemoryPool<uchar_t>(
+//		(params.block_size + params.block_overhead_size) * (params.no_thr_fastq_reader + params.no_thr_sam_generators) * params.no_fastq_blocks_per_thread,
+//		params.block_size + params.block_overhead_size);
+
 	objects.mp_fastq_blocks = new CMemoryPool<uchar_t>(
-		(params.block_size + params.block_overhead_size) * (params.no_thr_fastq_reader + params.no_thr_sam_generators) * params.no_fastq_blocks_per_thread,
+		(params.block_size + params.block_overhead_size) * params.no_fastq_blocks_per_thread * (2.5 * params.no_thr_fastq_reader + params.no_thr_sam_generators),
 		params.block_size + params.block_overhead_size);
+	objects.IncreaseMem("mp_fastq_blocks", (params.block_size + params.block_overhead_size) * params.no_fastq_blocks_per_thread * (2.5 * params.no_thr_fastq_reader + params.no_thr_sam_generators));
 
 	objects.mp_fastq_records = new CMemoryPool<uchar_t>(params.max_fastq_rec_length * params.no_thr_sam_generators * 3 * 4, params.max_fastq_rec_length);
+	objects.IncreaseMem("mp_fastq_records", params.max_fastq_rec_length * params.no_thr_sam_generators * 3 * 4);
 
 	if (params.gzipped_SAM_level == 0)
+	{
 		objects.mp_sam_parts = new CMemoryPool<uchar_t>(params.sam_part_size * params.no_thr_sam_generators * 2, params.sam_part_size);
+		objects.IncreaseMem("mp_sam_parts", params.sam_part_size * params.no_thr_sam_generators * 2);
+	}
 	else
+	{
 		objects.mp_sam_parts = new CMemoryPool<uchar_t>(params.sam_part_size * params.no_thr_sam_generators * 3, params.sam_part_size);
+		objects.IncreaseMem("mp_sam_parts", params.sam_part_size * params.no_thr_sam_generators * 3);
+	}
 
 	objects.mp_ext_cigar = new CMemoryPool<uchar_t>(params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings, params.max_cigar_len);
+	objects.IncreaseMem("mp_cigar_ext", params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings);
+
 	objects.mp_cigar = new CMemoryPool<uchar_t>(params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings, params.max_cigar_len);
+	objects.IncreaseMem("mp_cigar", params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings);
+
+	objects.mp_cigar_bin = new CMemoryPool<uint32_t>(params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings, params.max_cigar_len);
+	objects.IncreaseMem("mp_cigar_bin", params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings);
+
 	objects.mp_mdz = new CMemoryPool<uchar_t>(params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings, params.max_cigar_len);
+	objects.IncreaseMem("mp_mdz", params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings);
 
 	// Prepare queues
 	objects.q_file_names = new CRegisteringQueue<file_name_no_t>(1);
@@ -1299,6 +1344,8 @@ bool CMapper::reads_postprocessing(mapping_mode_t mapping_mode)
 	objects.q_sam_blocks = new CRegisteringQueue<sam_block_t>(params.no_thr_sam_generators);
 
 	objects.mem_monitor = new CMemoryMonitor(params.max_res_dev_memory);
+
+	objects.ptr_pool = new CPtrPool(params.no_thr_sam_generators * 2.5);
 
 	// Load ID store
 	CIDStore *id_store = new CIDStore(params.id_bits_total, params.id_bits_subgroup, params.id_bits_local, params.verbosity_level);
@@ -1334,10 +1381,11 @@ bool CMapper::reads_postprocessing(mapping_mode_t mapping_mode)
 	load_ref_seq_desc();
 
 	// Create SAM writer
-	vector<string> header_mapped, header_unmapped;
-	prepare_output_files(header_mapped, header_unmapped);
+	vector<string> header_SAM;
+	vector<pair<string, uint32_t>> header_BAM;
+	prepare_output_files(header_SAM, header_BAM);
 
-	CSamWriter* sw = new CSamWriter(&params, &objects, "mapped", header_mapped, "unmapped", header_unmapped);
+	CSamWriter* sw = new CSamWriter(&params, &objects, header_SAM, header_BAM);
 	thread *thr_sw = new thread(ref(*sw));
 
 	// Create FASTQ reader threads
@@ -1393,6 +1441,7 @@ bool CMapper::reads_postprocessing(mapping_mode_t mapping_mode)
 	delete objects.mp_fastq_records;
 	delete objects.mp_ext_cigar;
 	delete objects.mp_cigar;
+	delete objects.mp_cigar_bin;
 	delete objects.mp_mdz;
 
 	delete objects.q_file_names;
@@ -1400,10 +1449,12 @@ bool CMapper::reads_postprocessing(mapping_mode_t mapping_mode)
 	delete objects.q_res_ids;
 	delete objects.q_sam_blocks;
 
+	delete objects.ptr_pool;
+
 	delete objects.mem_monitor;
 
-	cout << "***** End of work *****\n";
-	fflush(stdout);
+	cerr << "***** End of work *****\n";
+	fflush(stderr);
 
 	watch.StopTimer();
 	//	objects.running_stats->AddTotals(STAT_TIME_SPLIT, watch.GetElapsedTime());
@@ -1424,8 +1475,8 @@ bool CMapper::reads_mapping_single_stage(uint32_t stage_major, uint32_t stage_mi
 
 	if (params.verbosity_level > 0)
 	{
-		cout << "***** Reads mapping - single stage *****\n";
-		fflush(stdout);
+		cerr << "***** Reads mapping - single stage *****\n";
+		fflush(stderr);
 	}
 
 	//	uint32_t max_stage = max(params.max_no_mismatches, params.max_no_indels);
@@ -1490,8 +1541,8 @@ bool CMapper::reads_mapping_single_stage(uint32_t stage_major, uint32_t stage_mi
 
 	if (params.verbosity_level > 0)
 	{
-		cout << "End of single stage mapping\n";
-		fflush(stdout);
+		cerr << "End of single stage mapping\n";
+		fflush(stderr);
 	}
 
 	return true;
@@ -1508,8 +1559,8 @@ bool CMapper::reads_mapping_stage_range(uint32_t stage_major_from, uint32_t stag
 
 	if (params.verbosity_level > 0)
 	{
-		cout << "***** Reads mapping - range of stages *****\n";
-		fflush(stdout);
+		cerr << "***** Reads mapping - range of stages *****\n";
+		fflush(stderr);
 	}
 
 	uint32_t max_stage = params.max_no_errors;
@@ -1606,8 +1657,8 @@ bool CMapper::reads_mapping_stage_range(uint32_t stage_major_from, uint32_t stag
 
 	if (params.verbosity_level > 1)
 	{
-		cout << "End of stage range mapping\n";
-		fflush(stdout);
+		cerr << "End of stage range mapping\n";
+		fflush(stderr);
 	}
 
 	return true;
@@ -1625,9 +1676,9 @@ bool CMapper::stage(uint32_t stage_major, uint32_t stage_minor, uint32_t prev_st
 
 	if (params.verbosity_level > 1)
 	{
-		cout << "--------------------------\n";
-		cout << "Stage: " << stage_major << ":" << stage_minor << (sensitive_mode ? " sensitive\n" : "\n");
-		fflush(stdout);
+		cerr << "--------------------------\n";
+		cerr << "Stage: " << stage_major << ":" << stage_minor << (sensitive_mode ? " sensitive\n" : "\n");
+		fflush(stderr);
 	}
 
 	objects.q_bins_read = new CRegisteringQueue<reads_bin_t>(1);
@@ -1674,30 +1725,32 @@ bool CMapper::stage(uint32_t stage_major, uint32_t stage_minor, uint32_t prev_st
 	delete objects.mp_bins_write;
 
 	if (params.verbosity_level > 1)
-		cout << "\n";
+		cerr << "\n";
 
 	return true;
 }
 
 // ************************************************************************************
 // Prepare SAM files
-bool CMapper::prepare_output_files(vector<string> &header_mapped, vector<string> &header_unmapped)
+bool CMapper::prepare_output_files(vector<string> &header_SAM, vector<pair<string, uint32_t>> &header_BAM)
 {
-	header_mapped.clear();
-	header_unmapped.clear();
+	header_SAM.clear();
+	header_BAM.clear();
 
 	// Mapped reads
-	header_mapped.push_back("@HD\tVN:1.3\tSO:unsorted\n");
+	header_SAM.push_back("@HD\tVN:1.3\tSO:unsorted\n");
 
 	vector<seq_desc_t> seq_desc;
 	ref_seq_desc.GetDescription(seq_desc);
 
 	for (auto &p : seq_desc)
 	{
-		header_mapped.push_back("@SQ\t");
-		header_mapped.push_back("SN:" + p.name + "\t");
-		header_mapped.push_back("LN:" + Int2String(p.size + p.no_initial_Ns + p.no_final_Ns));
-		header_mapped.push_back("\n");
+		header_SAM.push_back("@SQ\t");
+		header_SAM.push_back("SN:" + p.name + "\t");
+		header_SAM.push_back("LN:" + Int2String(p.size + p.no_initial_Ns + p.no_final_Ns));
+		header_SAM.push_back("\n");
+
+		header_BAM.push_back(make_pair(p.name, p.size + p.no_initial_Ns + p.no_final_Ns));
 	}
 
 	string cmd = params.command_line;
@@ -1707,19 +1760,16 @@ bool CMapper::prepare_output_files(vector<string> &header_mapped, vector<string>
 		else if (*c == '@')
 			*c = ' ';
 
-	header_mapped.push_back("@PG\tID:" + string(MAPPER_ID));
-	header_mapped.push_back("\tPN:" + string(MAPPER_NAME));
-	header_mapped.push_back("\tVN:" + string(MAPPER_VERSION));
-	header_mapped.push_back("\tCL:" + cmd);
-	header_mapped.push_back("\n");
+	if (params.read_group_line.length() > 0) {
+		header_SAM.push_back(params.read_group_line + "\n");
+	}
 
-	// Unmapped reads
-	header_unmapped.push_back("@HD\tVN:1.3\tSO:unsorted\n");
-	header_unmapped.push_back("@PG\tID:" + string(MAPPER_ID));
-	header_unmapped.push_back("\tPN:" + string(MAPPER_NAME));
-	header_unmapped.push_back("\tVN:" + string(MAPPER_VERSION));
-	header_unmapped.push_back("\tCL:" + cmd);
-	header_unmapped.push_back("\n");
+	header_SAM.push_back("@PG\tID:" + string(MAPPER_ID));
+	header_SAM.push_back("\tPN:" + string(MAPPER_NAME));
+	header_SAM.push_back("\tVN:" + string(MAPPER_VERSION));
+	header_SAM.push_back("\tCL:" + cmd);
+	header_SAM.push_back("\n");
+	
 
 	return true;
 }

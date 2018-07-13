@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -119,7 +119,7 @@ read_id_t CIDStore::RegisterBlock(uint32_t file_no, string file_name, uint32_t f
 	}
 
 	if(verbosity_level > 2)
-		cout << "IDStore:-register " << hex << id << "\n";
+		cerr << "IDStore:-register " << hex << id << "\n";
 
 	return id;
 }
@@ -140,7 +140,7 @@ read_id_t CIDStore::GetBlockID(uint32_t file_no, string file_name, uint32_t file
 	id += ((read_id_t) file_part & sub_block_mask) << in_block_bits;
 
 	if(verbosity_level > 2)
-		cout << "IDStore-get: " << hex << id << "\n";
+		cerr << "IDStore-get: " << hex << id << "\n";
 
 	return id;
 }

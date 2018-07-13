@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -23,12 +23,12 @@
 // Construct suffix array for direct genome
 bool suffix_array_construct_dir(const string index_name, const string dest_dir, const string temp_dir)
 {
-	cout << "\n***** Stage 5. Suffix array construction (direct)\n";
+	cerr << "\n***** Stage 5. Suffix array construction (direct)\n";
 
 	shared_ptr<CMapperFile> in(new CMapperFile(EXT_REF_SEQ_DIR, MARKER_REF_SEQ_DIR));
 	if(!in->OpenRead(temp_dir + index_name))
 	{
-		cout << "Cannot open reference sequence (direct)\n";
+		cerr << "Cannot open reference sequence (direct)\n";
 		return false;
 	}
 	int64_t size = in->GetSize();
@@ -36,7 +36,7 @@ bool suffix_array_construct_dir(const string index_name, const string dest_dir, 
 	shared_ptr<CMapperFile> out(new CMapperFile(EXT_SA_DIR, MARKER_SA_DIR, sizeof(uint32_t)));
 	if(!out->OpenWrite(dest_dir + index_name))
 	{
-		cout << "Cannot create suffix array (direct)\n";
+		cerr << "Cannot create suffix array (direct)\n";
 		return false;
 	}
 
@@ -49,12 +49,12 @@ bool suffix_array_construct_dir(const string index_name, const string dest_dir, 
 // Construct suffix array for rev. comp. genome
 bool suffix_array_construct_rc(const string index_name, const string dest_dir, const string temp_dir)
 {
-	cout << "\n***** Stage 6. Suffix array construction (rev. comp.)\n";
+	cerr << "\n***** Stage 6. Suffix array construction (rev. comp.)\n";
 
 	shared_ptr<CMapperFile> in(new CMapperFile(EXT_REF_SEQ_RC, MARKER_REF_SEQ_RC));
 	if(!in->OpenRead(temp_dir + index_name))
 	{
-		cout << "Cannot open reference sequence (rev. comp.)\n";
+		cerr << "Cannot open reference sequence (rev. comp.)\n";
 		return false;
 	}
 	int64_t size = in->GetSize();
@@ -62,7 +62,7 @@ bool suffix_array_construct_rc(const string index_name, const string dest_dir, c
 	shared_ptr<CMapperFile> out(new CMapperFile(EXT_SA_RC, MARKER_SA_RC, sizeof(uint32_t)));
 	if(!out->OpenWrite(dest_dir + index_name))
 	{
-		cout << "Cannot create suffix array (rev. comp.)\n";
+		cerr << "Cannot create suffix array (rev. comp.)\n";
 		return false;
 	}
 
@@ -75,7 +75,7 @@ bool suffix_array_construct_rc(const string index_name, const string dest_dir, c
 // Construct suffix array
 bool suffix_array_construct(shared_ptr<CMapperFile> in, shared_ptr<CMapperFile> out, uint32_t size, bool translate_Ns)
 {
-	cout << "Reading...\n";
+	cerr << "Reading...\n";
 	++size;
 	shared_ptr<uchar_t> ref_seq(new uchar_t[size]);
 	in->Read(ref_seq.get(), size-1);
@@ -83,7 +83,7 @@ bool suffix_array_construct(shared_ptr<CMapperFile> in, shared_ptr<CMapperFile> 
 
 	if(translate_Ns)
 	{
-		cout << "Translation Ns...\n";
+		cerr << "Translation Ns...\n";
 		for(int64_t i = 0; i < size-1; ++i)
 			if(ref_seq.get()[i] == sym_code_N_ref)
 				ref_seq.get()[i] = 0;
@@ -91,14 +91,14 @@ bool suffix_array_construct(shared_ptr<CMapperFile> in, shared_ptr<CMapperFile> 
 				ref_seq.get()[i] += 1;
 	}
 
-	cout << "Construction... ";
+	cerr << "Construction... ";
 	shared_ptr<uint32_t> sa(new uint32_t[size]);
 	SA_IS(ref_seq.get(), sa.get(), size, 255, sizeof(uchar_t), 0);
-	cout << "\n";
+	cerr << "\n";
 
 	if(translate_Ns)
 	{
-		cout << "Reverse translation Ns...\n";
+		cerr << "Reverse translation Ns...\n";
 		for(int64_t i = 0; i < size-1; ++i)
 			if(ref_seq.get()[i] == 0)
 				ref_seq.get()[i] = sym_code_N_ref;
@@ -106,10 +106,10 @@ bool suffix_array_construct(shared_ptr<CMapperFile> in, shared_ptr<CMapperFile> 
 				ref_seq.get()[i] -= 1;
 	}
 
-	cout << "Cleanup";
+	cerr << "Cleanup";
 	suffix_array_cleanup(ref_seq, sa, size, lut_long_prefix_len);
 
-	cout << "Writing...";
+	cerr << "Writing...";
 	uint32_t *sa_ptr = sa.get();
 	while(size)
 	{
@@ -117,12 +117,12 @@ bool suffix_array_construct(shared_ptr<CMapperFile> in, shared_ptr<CMapperFile> 
 
 		if(to_write > size)
 			to_write = size;
-		cout << ".";	fflush(stdout);
+		cerr << ".";	fflush(stderr);
 		out->Write(sa_ptr, to_write);
 		size -= to_write;
 		sa_ptr += to_write;
 	}
-	cout << "\n";
+	cerr << "\n";
 
 	return true;
 }
@@ -153,13 +153,13 @@ bool suffix_array_cleanup(shared_ptr<uchar_t> text, shared_ptr<uint32_t> sa, uin
 
 		if((i & ((1 << 26) - 1)) == 0)
 		{
-			cout << ".";
-			fflush(stdout);
+			cerr << ".";
+			fflush(stderr);
 		}
 	}
 	watch.StopTimer();
 
-	cout << "\nCompacted from " << size << " to " << idx << " entries in " << watch.GetElapsedTime() << "s\n";
+	cerr << "\nCompacted from " << size << " to " << idx << " entries in " << watch.GetElapsedTime() << "s\n";
 
 	size = idx;
 
@@ -170,12 +170,12 @@ bool suffix_array_cleanup(shared_ptr<uchar_t> text, shared_ptr<uint32_t> sa, uin
 // Compute LUT for direct genome
 bool lut_compute_dir(const string index_name, const string dest_dir, const string temp_dir)
 {
-	cout << "\n***** Stage 7. LUT computation (direct)\n";
+	cerr << "\n***** Stage 7. LUT computation (direct)\n";
 
 	shared_ptr<CMapperFile> in_text(new CMapperFile(EXT_REF_SEQ_DIR, MARKER_REF_SEQ_DIR));
 	if(!in_text->OpenRead(temp_dir + index_name))
 	{
-		cout << "Cannot open reference sequence (direct)\n";
+		cerr << "Cannot open reference sequence (direct)\n";
 		return false;
 	}
 	int64_t size_text = in_text->GetSize();
@@ -183,7 +183,7 @@ bool lut_compute_dir(const string index_name, const string dest_dir, const strin
 	shared_ptr<CMapperFile> in_sa(new CMapperFile(EXT_SA_DIR, MARKER_SA_DIR, sizeof(uint32_t)));
 	if(!in_sa->OpenRead(dest_dir + index_name))
 	{
-		cout << "Cannot open suffix array (direct)\n";
+		cerr << "Cannot open suffix array (direct)\n";
 		return false;
 	}
 	int64_t size_sa = in_sa->GetSize();
@@ -191,14 +191,14 @@ bool lut_compute_dir(const string index_name, const string dest_dir, const strin
 	shared_ptr<CMapperFile> out_short(new CMapperFile(EXT_LUT_SHORT_DIR, MARKER_LUT_SHORT_DIR, sizeof(uint32_t)));
 	if(!out_short->OpenWrite(dest_dir + index_name))
 	{
-		cout << "Cannot create LUT short (direct)\n";
+		cerr << "Cannot create LUT short (direct)\n";
 		return false;
 	}
 
 	shared_ptr<CMapperFile> out_long(new CMapperFile(EXT_LUT_LONG_DIR, MARKER_LUT_LONG_DIR, sizeof(uint32_t)));
 	if(!out_long->OpenWrite(dest_dir + index_name))
 	{
-		cout << "Cannot create LUT long (direct)\n";
+		cerr << "Cannot create LUT long (direct)\n";
 		return false;
 	}
 
@@ -211,12 +211,12 @@ bool lut_compute_dir(const string index_name, const string dest_dir, const strin
 // Compute LUT for rev. comp. genome
 bool lut_compute_rc(const string index_name, const string dest_dir, const string temp_dir)
 {
-	cout << "\n***** Stage 8. LUT computation (rev. comp.)\n";
+	cerr << "\n***** Stage 8. LUT computation (rev. comp.)\n";
 
 	shared_ptr<CMapperFile> in_text(new CMapperFile(EXT_REF_SEQ_RC, MARKER_REF_SEQ_RC));
 	if(!in_text->OpenRead(temp_dir + index_name))
 	{
-		cout << "Cannot open reference sequence (rev. comp.)\n";
+		cerr << "Cannot open reference sequence (rev. comp.)\n";
 		return false;
 	}
 	int64_t size_text = in_text->GetSize();
@@ -224,7 +224,7 @@ bool lut_compute_rc(const string index_name, const string dest_dir, const string
 	shared_ptr<CMapperFile> in_sa(new CMapperFile(EXT_SA_RC, MARKER_SA_RC, sizeof(uint32_t)));
 	if(!in_sa->OpenRead(dest_dir + index_name))
 	{
-		cout << "Cannot open suffix array (rev. comp.)\n";
+		cerr << "Cannot open suffix array (rev. comp.)\n";
 		return false;
 	}
 	int64_t size_sa = in_sa->GetSize();
@@ -232,14 +232,14 @@ bool lut_compute_rc(const string index_name, const string dest_dir, const string
 	shared_ptr<CMapperFile> out_short(new CMapperFile(EXT_LUT_SHORT_RC, MARKER_LUT_SHORT_RC, sizeof(uint32_t)));
 	if(!out_short->OpenWrite(dest_dir + index_name))
 	{
-		cout << "Cannot create LUT short (rev. comp.)\n";
+		cerr << "Cannot create LUT short (rev. comp.)\n";
 		return false;
 	}
 
 	shared_ptr<CMapperFile> out_long(new CMapperFile(EXT_LUT_LONG_RC, MARKER_LUT_LONG_RC, sizeof(uint32_t)));
 	if(!out_long->OpenWrite(dest_dir + index_name))
 	{
-		cout << "Cannot create LUT long (rev. comp.)\n";
+		cerr << "Cannot create LUT long (rev. comp.)\n";
 		return false;
 	}
 
@@ -255,9 +255,9 @@ bool lut_compute(shared_ptr<CMapperFile> in_text, shared_ptr<CMapperFile> in_sa,
 	shared_ptr<uchar_t> ref_seq(new uchar_t[size_text]);
 	shared_ptr<uint32_t> sa(new uint32_t[size_sa]);
 
-	cout << "Reading reference sequence...\n";
+	cerr << "Reading reference sequence...\n";
 	in_text->Read(ref_seq.get(), size_text);
-	cout << "Reading suffix array";
+	cerr << "Reading suffix array";
 	uint32_t to_read;
 	uint32_t size = size_sa;
 	uint32_t *ptr = sa.get();
@@ -270,17 +270,17 @@ bool lut_compute(shared_ptr<CMapperFile> in_text, shared_ptr<CMapperFile> in_sa,
 		in_sa->Read(ptr, to_read);
 		size -= to_read;
 		ptr += to_read;
-		cout << ".";
-		fflush(stdout);
+		cerr << ".";
+		fflush(stderr);
 	}
-	cout << "\n";
+	cerr << "\n";
 
 	uint32_t size_lut_short = (1 << (2 * lut_short_prefix_len)) + 1;
 	uint32_t size_lut_long  = (1 << (2 * lut_long_prefix_len)) + 1;
 	shared_ptr<uint32_t> lut_short(new uint32_t[size_lut_short]);
 	shared_ptr<uint32_t> lut_long(new uint32_t[size_lut_long]);
 
-	cout << "Computing LUT";
+	cerr << "Computing LUT";
 	uint32_t lut_value_prev = ~(0u);
 
 	uchar_t *text = ref_seq.get();
@@ -300,8 +300,8 @@ bool lut_compute(shared_ptr<CMapperFile> in_text, shared_ptr<CMapperFile> in_sa,
 
 		if((i & ((1 << 26) - 1)) == 0)
 		{
-			cout << ".";
-			fflush(stdout);
+			cerr << ".";
+			fflush(stderr);
 		}
 	}
 	while(lut_value_prev != size_lut_long-1)
@@ -310,9 +310,9 @@ bool lut_compute(shared_ptr<CMapperFile> in_text, shared_ptr<CMapperFile> in_sa,
 	uint32_t lut_scale = (size_lut_long - 1) / (size_lut_short - 1);
 	for(uint32_t i = 0; i < size_lut_short; ++i)
 		lut_short.get()[i] = lut_long.get()[i * lut_scale];
-	cout << "\n";
+	cerr << "\n";
 
-	cout << "Writing LUT...\n";
+	cerr << "Writing LUT...\n";
 	out_short->Write(lut_short.get(), size_lut_short);
 	out_long->Write(lut_long.get(), size_lut_long);
 	

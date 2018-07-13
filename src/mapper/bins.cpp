@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -207,7 +207,7 @@ bool CBinsWriter::write_bin(uint32_t bin_id)
 
 	n_write_bytes += offset;
 	if(verbosity_level >= 3)
-		cout << "Write bin: " << offset << " B\n";
+		cerr << "Write bin: " << offset << " B\n";
 
 	// Find the largest bin
 	largest_bin_id   = 0;
@@ -290,7 +290,7 @@ void CBinsReader::operator()()
 	{
 		uint32_t bin_id = bin_reordering[i].first;
 		if(verbosity_level >= 3)		
-			cout << "Read bin: " << get_name(bin_id) << "  (" << i << ")\n";
+			cerr << "Read bin: " << get_name(bin_id) << "  (" << i << ")\n";
 		if(!f_bin->OpenRead(get_name(bin_id)))
 			continue;
 
@@ -488,7 +488,7 @@ bool CBinPrefixes::ReduceMap(uint32_t _no_bins)
 		}
 
 		if (verbosity_level >= 3)
-			cout << "Bin no. reducer: " << current_no_bins << "\n";
+			cerr << "Bin no. reducer: " << current_no_bins << "\n";
 	}
 
 	// Construct map of prefixes onto bin ids

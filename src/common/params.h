@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -23,6 +23,7 @@
 #include <string>
 #include <vector>
 #include <ostream>
+#include <sstream>
 
 using namespace std;
 
@@ -39,6 +40,9 @@ struct CCmdParams
 	bool is_fasta;
 	bool keep_temporary_files;
 	uint32_t gzipped_SAM_level;
+	bool store_BAM;
+	bool use_stdout;
+	string read_group_line;
 
 	bool developer_mode;
 	bool log_stats;
@@ -53,7 +57,8 @@ struct CCmdParams
 	uint32_t min_read_len;
 	uint32_t max_read_len;
 	bool paired_reads;
-	double max_frac_errors;
+//	double max_frac_errors;
+	uint32_t max_no_errors;
 	uint32_t max_no_mappings;
 	mapping_mode_t mapping_mode;
 	mapping_orientation_t mapping_orientation;
@@ -97,7 +102,8 @@ struct CCmdParams
 		max_total_memory = ((uint64_t) 16) << 30;		// 16 GB
 
 		// Mapping 
-		max_frac_errors = 0.04;
+//		max_frac_errors = 0.04;
+		max_no_errors = 4;
 		mapping_mode = mapping_mode_t::first;
 		mapping_orientation = mapping_orientation_t::forward_reverse;
 		max_mate_distance = 1000;
@@ -135,6 +141,8 @@ struct CCmdParams
 		mask_low_quality_bases = 0;
 
 		gzipped_SAM_level = 0;		// 0 - no compression
+		store_BAM = false;
+		use_stdout = false;
 
 		verbosity_level = 1;
 		filter = "";
@@ -145,6 +153,7 @@ struct CCmdParams
 
 		project_name = "whisper";	
 		temp_prefix = "./whisper_temp_";
+		read_group_line = "";
 #ifdef _DEVELOPMENT_MODE
 //		keep_temporary_files = true;
 		keep_temporary_files = false;
@@ -153,7 +162,6 @@ struct CCmdParams
 #endif
 	}
 };
-
 
 // ************************************************************************************
 struct CParams : public CCmdParams
@@ -205,6 +213,8 @@ struct CParams : public CCmdParams
 
 	vector<vector<pair<uint32_t, uint32_t>>> stage_segments;
 
+	string read_group_id;
+
 	CParams() : CCmdParams()
 	{
 		ssd_mode = false;
@@ -226,7 +236,9 @@ struct CParams : public CCmdParams
 
 		read_len = 10240 + 1;
 
-		max_no_errors = (uint32_t) (max_frac_errors * max_read_len);
+		read_group_id = "";
+
+//		max_no_errors = (uint32_t) (max_frac_errors * max_read_len);
 	}
 
 	CParams &operator=(const CCmdParams &cmd_params)
@@ -251,7 +263,7 @@ struct CParams : public CCmdParams
 		min_read_len = cmd_params.min_read_len;
 		max_read_len = cmd_params.max_read_len;
 		paired_reads = cmd_params.paired_reads;
-		max_frac_errors = cmd_params.max_frac_errors;
+		max_no_errors = cmd_params.max_no_errors;
 		max_no_mappings = cmd_params.max_no_mappings;
 		mapping_mode = cmd_params.mapping_mode;
 		mapping_orientation = cmd_params.mapping_orientation;
@@ -283,10 +295,34 @@ struct CParams : public CCmdParams
 
 		// Output format
 		gzipped_SAM_level = cmd_params.gzipped_SAM_level;
+		store_BAM = cmd_params.store_BAM;
+		use_stdout = cmd_params.use_stdout;
 
 		// User interface
 		verbosity_level = cmd_params.verbosity_level;
 		filter = cmd_params.filter;
+
+		// parse RG line
+		read_group_line = cmd_params.read_group_line;
+		if (cmd_params.read_group_line != "") {
+			// replace \\t with \t
+			size_t index = 0;
+			while ((index = read_group_line.find("\\t", index)) != string::npos) {
+				read_group_line.replace(index, 2, "\t");
+				index += 2;
+			}
+
+			std::istringstream iss(read_group_line);
+
+			// extract id
+			string token;
+			while (iss >> token) {
+				index = token.find("ID:", 0);
+				if (index != string::npos) {
+					read_group_id = token.substr(3);
+				}
+			}
+		}
 
 		return *this;
 	}
@@ -305,6 +341,7 @@ struct CObjects
 	CMemoryPool<uchar_t> *mp_fastq_records;
 	CMemoryPool<uchar_t> *mp_ext_cigar;
 	CMemoryPool<uchar_t> *mp_cigar;
+	CMemoryPool<uint32_t> *mp_cigar_bin;
 	CMemoryPool<uchar_t> *mp_mdz;
 	
 	CRegisteringQueue<file_name_no_t> *q_file_names;
@@ -330,6 +367,9 @@ struct CObjects
 	// Serial processing
 	CSerialProcessing *serial_processing;
 
+	// Pool of pointers
+	CPtrPool *ptr_pool;
+
 	CReference *reference;
 	CSuffixArray *sa_dir;
 	CSuffixArray *sa_rc;
@@ -337,6 +377,26 @@ struct CObjects
 	CRunningStats *running_stats;
 
 	CProgress *progress;
+
+	int64_t mem_alloc;
+	mutex mtx;
+
+	CObjects() : mem_alloc(0)
+	{}
+
+	void IncreaseMem(string s, int64_t x)
+	{
+		unique_lock<mutex> lck(mtx);
+		mem_alloc += x;
+//		cerr << "Memory: " + to_string(x >> 20) + " MB  (" + s + ")\n";
+	}
+
+	void DecreaseMem(string s, int64_t x)
+	{
+		unique_lock<mutex> lck(mtx);
+		mem_alloc -= x;
+//		cerr << "Memory: " + to_string(x >> 20) + " MB  (" + s + ")\n";
+	}
 };
 
 #endif

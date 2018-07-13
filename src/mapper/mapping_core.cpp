@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -251,7 +251,7 @@ void CMappingCore::operator()()
 			
 			if (verbosity_level >= 2)
 			{
-				cout << "Mapping bin: " << prefixes[bin.bin_id] << "   (" << bin.bin_num << ": " << bin.count << " reads)\n";
+				cerr << "Mapping bin: " << prefixes[bin.bin_id] << "   (" << bin.bin_num << ": " << bin.count << " reads)\n";
 			}
 
 			prefix_len = (uint32_t)prefixes[bin.bin_id].size();
@@ -276,7 +276,7 @@ void CMappingCore::operator()()
 
 			if (verbosity_level >= 2)
 			{
-				cout << "Completed bin: " << prefixes[bin.bin_id] << "\n";
+				cerr << "Completed bin: " << prefixes[bin.bin_id] << "\n";
 			}
 			bin_watch.StopTimer();
 
@@ -330,7 +330,7 @@ inline uint32_t CMappingCore::get_next_bin_id(uchar_t* data)
 }
 
 //**********************************************************************************************************
-//Return binary encoded (2bits per symbol) size-symbol long prefix of read
+// Return binary encoded (2bits per symbol) size-symbol long prefix of read
 //********************************************************************************************************** 
 inline uint32_t CMappingCore::get_read_prefix(uchar_t* data, uint32_t size)
 {
@@ -470,6 +470,7 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 			rc_match_positions.clear();
 
 			//			collected_mappings.clear();
+			collected_mappings.Clear(max_no_mappings);
 
 			// Compare (prefix_len+sa_prefix_overhead)-symbols long prefix of a read with a previous read
 			uint32_t cur_read_prefix = get_read_prefix(data, prefix_len + sa_prefix_overhead);
@@ -479,7 +480,7 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 			{
 				// Read SA part if necessary
 				if (verbosity_level > 1)
-					cout << "Loading SA: " << hex << cur_read_prefix << dec << "   (prefix_len: " << prefix_len << ")\n";
+					cerr << "Loading SA: " << hex << cur_read_prefix << dec << "   (prefix_len: " << prefix_len << ")\n";
 				sa_dir->ReleaseSAPart(sa_dir_part);
 				sa_rc->ReleaseSAPart(sa_rc_part);
 
@@ -508,7 +509,7 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 #endif
 				prev_read_prefix = cur_read_prefix;
 				if (verbosity_level > 2)
-					cout << "Loaded SA : " << hex << cur_read_prefix << dec << "   dir_size: " << sa_dir_size << "   rc_size: " << sa_rc_size << "\n";
+					cerr << "Loaded SA : " << hex << cur_read_prefix << dec << "   dir_size: " << sa_dir_size << "   rc_size: " << sa_rc_size << "\n";
 			} //end_if(cur_read_prefix != prev_read_prefix)
 
 			reverse_read(data, size, &rc_data, &rc_data_sft, rc_lut);
@@ -532,15 +533,17 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 			{
 				dir_exactMatchCounter++;
 				for (uint32_t i = 0; i < dir_match_positions.size(); i++)
-					results_collector->Push(id, dir_match_positions[i].first, genome_t::direct, 0);
-				//					collected_mappings.emplace_back(make_tuple(id, dir_match_positions[i].first, genome_t::direct, 0));
+					//					results_collector->Push(id, dir_match_positions[i].first, genome_t::direct, 0);
+									//					collected_mappings.emplace_back(make_tuple(id, dir_match_positions[i].first, genome_t::direct, 0));
+					collected_mappings.Push(dir_match_positions[i].first, genome_t::direct, 0);
 			}
 			if (rcExact_match_found)
 			{
 				rc_exactMatchCounter++;
 				for (uint32_t i = 0; i < rc_match_positions.size(); i++)
-					results_collector->Push(id, rc_match_positions[i].first, genome_t::rev_comp, 0);
+//					results_collector->Push(id, rc_match_positions[i].first, genome_t::rev_comp, 0);
 				//					collected_mappings.emplace_back(make_tuple(id, rc_match_positions[i].first, genome_t::rev_comp, 0));
+					collected_mappings.Push(rc_match_positions[i].first, genome_t::rev_comp, 0);
 			}
 
 			if (dirExact_match_found && rcExact_match_found)
@@ -551,6 +554,12 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 			for (auto &x : collected_mappings)
 			results_collector->Push(get<0>(x), get<1>(x), get<2>(x), get<3>(x));
 			collected_mappings.clear();*/
+
+			while (!collected_mappings.Empty())
+			{
+				uint64_t x = collected_mappings.PopUnsorted();
+				results_collector->Push(id, collected_mappings.DecodePos(x), collected_mappings.DecodeDir(x), collected_mappings.DecodeNoErrors(x));
+			}
 		}//end_if(dirExact_match_found || rcExact_match_found)
 
 		 //******************************************************************************************************
@@ -587,8 +596,9 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 					for (uint32_t i = 0; i < dir_match_positions.size(); i++)
 						//						results_collector->Push(id, dir_match_positions[i].first, genome_t::direct, stage_major, 0);
 						//						results_collector->Push(id, dir_match_positions[i].first, genome_t::direct, stage_major);
-						results_collector->Push(id, dir_match_positions[i].first, genome_t::direct, dir_mismatch);
+//						results_collector->Push(id, dir_match_positions[i].first, genome_t::direct, dir_mismatch);
 					//						collected_mappings.emplace_back(make_tuple(id, dir_match_positions[i].first, genome_t::direct, dir_mismatch));
+						collected_mappings.Push(dir_match_positions[i].first, genome_t::direct, dir_mismatch);
 				}
 
 				if (rc_mismatch <= 1)
@@ -597,8 +607,9 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 					for (uint32_t i = 0; i < rc_match_positions.size(); i++)
 						//						results_collector->Push(id, rc_match_positions[i].first, genome_t::rev_comp, stage_major, 0);
 						//						results_collector->Push(id, rc_match_positions[i].first, genome_t::rev_comp, stage_major);
-						results_collector->Push(id, rc_match_positions[i].first, genome_t::rev_comp, rc_mismatch);
+//						results_collector->Push(id, rc_match_positions[i].first, genome_t::rev_comp, rc_mismatch);
 					//						collected_mappings.emplace_back(make_tuple(id, rc_match_positions[i].first, genome_t::rev_comp, rc_mismatch));
+						collected_mappings.Push(rc_match_positions[i].first, genome_t::rev_comp, rc_mismatch);
 				}
 				best_error = MIN(dir_mismatch, rc_mismatch);
 
@@ -607,6 +618,11 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 				for (auto &x : collected_mappings)
 				results_collector->Push(get<0>(x), get<1>(x), get<2>(x), get<3>(x));
 				collected_mappings.clear();*/
+				while (!collected_mappings.Empty())
+				{
+					uint64_t x = collected_mappings.PopUnsorted();
+					results_collector->Push(id, collected_mappings.DecodePos(x), collected_mappings.DecodeDir(x), collected_mappings.DecodeNoErrors(x));
+				}
 			}
 		} //end else - nither dirExact_match_found nor rcExact_match_found
 
@@ -795,7 +811,7 @@ void CMappingCore::process_reads(reads_bin_t bin)
 			dir_match_positions.clear();
 			rc_match_positions.clear();
 
-			//			collected_mappings.clear();
+			collected_mappings.Clear(max_no_mappings);
 
 			// Compare (prefix_len+sa_prefix_overhead)-symbols long prefix of read with previous read
 			uint32_t cur_read_prefix = get_read_prefix(data, prefix_len + sa_prefix_overhead);
@@ -805,7 +821,7 @@ void CMappingCore::process_reads(reads_bin_t bin)
 			{
 				// Read SA part if necessary
 				if (verbosity_level > 1)
-					cout << "Loading SA: " << hex << cur_read_prefix << dec << "   (prefix_len: " << prefix_len << ")\n";
+					cerr << "Loading SA: " << hex << cur_read_prefix << dec << "   (prefix_len: " << prefix_len << ")\n";
 
 				sa_dir->ReleaseSAPart(sa_dir_part);
 				sa_rc->ReleaseSAPart(sa_rc_part);
@@ -829,7 +845,7 @@ void CMappingCore::process_reads(reads_bin_t bin)
 #endif
 				prev_read_prefix = cur_read_prefix;
 				if (verbosity_level > 2)
-					cout << "Loaded SA : " << hex << cur_read_prefix << dec << "   dir_size: " << sa_dir_size << "   rc_size: " << sa_rc_size << "\n";
+					cerr << "Loaded SA : " << hex << cur_read_prefix << dec << "   dir_size: " << sa_dir_size << "   rc_size: " << sa_rc_size << "\n";
 
 			} //end_if(cur_read_prefix != prev_read_prefix)
 
@@ -883,16 +899,18 @@ void CMappingCore::process_reads(reads_bin_t bin)
 			{
 				dir_acceptedMismatchCounter++;
 				for (uint32_t i = 0; i < dir_match_positions.size(); i++)
-					results_collector->Push(id, dir_match_positions[i].first, genome_t::direct, dir_match_positions[i].second);
+//					results_collector->Push(id, dir_match_positions[i].first, genome_t::direct, dir_match_positions[i].second);
 				//					collected_mappings.emplace_back(make_tuple(id, dir_match_positions[i].first, genome_t::direct, dir_match_positions[i].second));
+					collected_mappings.Push(dir_match_positions[i].first, genome_t::direct, dir_match_positions[i].second);
 			}
 
 			if (rc_mismatch <= max_mismatches)
 			{
 				rc_acceptedMismatchCounter++;
 				for (uint32_t i = 0; i < rc_match_positions.size(); i++)
-					results_collector->Push(id, rc_match_positions[i].first, genome_t::rev_comp, rc_match_positions[i].second);
+//					results_collector->Push(id, rc_match_positions[i].first, genome_t::rev_comp, rc_match_positions[i].second);
 				//						collected_mappings.emplace_back(make_tuple(id, rc_match_positions[i].first, genome_t::rev_comp, rc_match_positions[i].second));
+					collected_mappings.Push(rc_match_positions[i].first, genome_t::rev_comp, rc_match_positions[i].second);
 			}
 
 			/*			 if (collected_mappings.size() > max_no_mappings)
@@ -900,6 +918,12 @@ void CMappingCore::process_reads(reads_bin_t bin)
 			for (auto &x : collected_mappings)
 			results_collector->Push(get<0>(x), get<1>(x), get<2>(x), get<3>(x));
 			collected_mappings.clear();*/
+
+			while (!collected_mappings.Empty())
+			{
+				uint64_t x = collected_mappings.PopUnsorted();
+				results_collector->Push(id, collected_mappings.DecodePos(x), collected_mappings.DecodeDir(x), collected_mappings.DecodeNoErrors(x));
+			}
 
 			if (mapping_mode == mapping_mode_t::first)
 			{

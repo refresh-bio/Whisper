@@ -1,12 +1,11 @@
-
 // *******************************************************************************************
 // This file is a part of Whisper reads mapper.
 // The homepage of the project is http://sun.aei.polsl.pl/REFRESH/whisper
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -20,25 +19,22 @@
 // ************************************************************************************
 // CSamWriter
 // ************************************************************************************
-CSamWriter::CSamWriter(CParams *params, CObjects *objects, string name_mapped, vector<string> &header_mapped, string name_unmapped, vector<string> &header_unmapped)
+CSamWriter::CSamWriter(CParams *params, CObjects *objects, vector<string> &header_SAM, vector<pair<string, uint32_t>> &header_BAM)
 {
 	// !!! Open SAM files
 	total_size_mapped = 0;
-
 	verbosity_level = params->verbosity_level;
-
 	max_size = params->sam_buffer_memory;
-
 	q_sam_blocks = objects->q_sam_blocks;
-
 	gzipped_SAM_level = params->gzipped_SAM_level;
+	store_BAM = params->store_BAM;
+	use_stdout = params->use_stdout;
 
 	buffer_mapped = new uchar_t[max_size];
 
 	gzip = new CGzipMember(gzipped_SAM_level);
 
 	mp_sam_parts = objects->mp_sam_parts;
-
 	serial_processing = objects->serial_processing;
 
 	if (!serial_processing)
@@ -48,33 +44,36 @@ CSamWriter::CSamWriter(CParams *params, CObjects *objects, string name_mapped, v
 	}
 
 	string file_name_mapped = params->project_name;
-	file_name_mapped += ".sam";
 
-	if (gzipped_SAM_level)
-		file_name_mapped += ".gz";
+	if (store_BAM)
+	{
+		file_name_mapped += ".bam";
+	}
+	else
+	{
+		file_name_mapped += ".sam";
+
+		if (gzipped_SAM_level)
+			file_name_mapped += ".gz";
+	}
 
 	writes_no = 0;
 
-	file_mapped.OpenWrite(file_name_mapped);
+	if (use_stdout)
+		file_mapped.OpenStream(stdout);
+	else
+		file_mapped.OpenWrite(file_name_mapped);
 
-	if (gzipped_SAM_level > 0)
-		gz_begin_member(file_mapped, total_size_mapped, buffer_mapped);
-
-	for (auto &x : header_mapped)
-		if(gzipped_SAM_level == 0)
-			write(file_mapped, total_size_mapped, buffer_mapped, x);
-		else
-			gz_write(file_mapped, total_size_mapped, buffer_mapped, x);
-
-	if (gzipped_SAM_level > 0)
-		gz_end_member(file_mapped, total_size_mapped, buffer_mapped);
+	if (store_BAM)
+		write_BAM_header(header_SAM, header_BAM);
+	else
+		write_SAM_header(header_SAM);
 }
 
 // ************************************************************************************
 CSamWriter::~CSamWriter()
 {
 	delete gzip;
-
 	delete[] buffer_mapped;
 }
 
@@ -97,7 +96,7 @@ void CSamWriter::operator()()
 					});
 #endif
 					if (verbosity_level >= 3)
-						cout << "SamWriter: " << ++writes_no << " of size " << total_size_mapped << "\n";
+						cerr << "SamWriter: " << ++writes_no << " of size " << total_size_mapped << "\n";
 					total_size_mapped = 0;
 				}
 
@@ -113,8 +112,64 @@ void CSamWriter::operator()()
 }
 
 // ************************************************************************************
-void CSamWriter::push(sam_block_t block)
+void CSamWriter::write_SAM_header(vector<string> &header_SAM)
 {
+	if (gzipped_SAM_level > 0)
+		gz_begin_member(file_mapped, total_size_mapped, buffer_mapped);
+
+	for (auto &x : header_SAM)
+		if (gzipped_SAM_level == 0)
+			write(file_mapped, total_size_mapped, buffer_mapped, x);
+		else
+			gz_write(file_mapped, total_size_mapped, buffer_mapped, x);
+
+	if (gzipped_SAM_level > 0)
+		gz_end_member(file_mapped, total_size_mapped, buffer_mapped);
+}
+
+// ************************************************************************************
+void CSamWriter::write_BAM_header(vector<string> &header_SAM, vector<pair<string, uint32_t>> &header_BAM)
+{
+	// Preparing BAM header in binary uncompressed form
+	vector<uchar_t> raw_header;
+
+	raw_header.push_back('B');
+	raw_header.push_back('A');
+	raw_header.push_back('M');
+	raw_header.push_back(1);
+
+	uint32_t meta_len = 0;
+	for (auto &x : header_SAM)
+		meta_len += x.size();
+
+	StoreUIntLSB(raw_header, meta_len, 4);
+	for (auto &x : header_SAM)
+		raw_header.insert(raw_header.end(), x.begin(), x.end());
+
+	StoreUIntLSB(raw_header, header_BAM.size(), 4);
+
+	for (auto &x : header_BAM)
+	{
+		StoreUIntLSB(raw_header, x.first.size() + 1, 4);
+		raw_header.insert(raw_header.end(), x.first.begin(), x.first.end());
+		raw_header.push_back(0);
+		StoreUIntLSB(raw_header, x.second, 4);
+	}
+
+	uchar_t *h = raw_header.data();
+	uchar_t *dest = new uchar_t[64 << 10];
+	CBGZF bgzf(gzipped_SAM_level);
+
+	for (uint32_t i = 0; i < raw_header.size(); i += (62 << 10))
+	{
+		auto src = h + i;
+		uint32_t src_size = min((uint32_t)raw_header.size() - i, 62u << 10);
+
+		auto dest_size = bgzf.Compress(src, src_size, dest, 64u << 10);
+		file_mapped.Write(dest, dest_size);
+	}
+
+	delete[] dest;
 }
 
 // ************************************************************************************
@@ -126,7 +181,7 @@ void CSamWriter::write(CMapperFile &file, uint64_t &total_size, uchar_t* buffer,
 		file.Write(buffer, total_size);
 		total_size = 0;
 		if (verbosity_level >= 3)
-			cout << "SamWriter: " << ++writes_no << "\n";
+			cerr << "SamWriter: " << ++writes_no << "\n";
 		if (s.size() > max_size)
 			file.Write(s.c_str(), s.size());
 		else
@@ -193,12 +248,46 @@ void CSamWriter::complete()
 	});
 #endif
 	if (verbosity_level >= 3)
-		cout << "SamWriter: " << ++writes_no << "\n";
+		cerr << "SamWriter: " << ++writes_no << "\n";
 	if (verbosity_level >= 3)
-		cout << "SamWriter: " << ++writes_no << "\n";
+		cerr << "SamWriter: " << ++writes_no << "\n";
 
 	if (verbosity_level >= 3)
-		cout << "SamWriter complete\n";
+		cerr << "SamWriter complete\n";
+
+	if (store_BAM)
+	{
+		// Store EOF Block
+		file_mapped.WriteByte(0x1f);
+		file_mapped.WriteByte(0x8b);
+		file_mapped.WriteByte(0x08);
+		file_mapped.WriteByte(0x04);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0xff);
+		file_mapped.WriteByte(0x06);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x42);
+		file_mapped.WriteByte(0x43);
+		file_mapped.WriteByte(0x02);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x1b);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x03);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x00);
+		file_mapped.WriteByte(0x00);
+	}
+
 	file_mapped.Close();
 }
 

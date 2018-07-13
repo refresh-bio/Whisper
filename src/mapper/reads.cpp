@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-11-30
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -913,7 +913,7 @@ void CWReadsSplitter::operator()()
 		{
 			if(verbosity_level >= 2)
 			{
-				cout << "Reads splitter: " << hex << fastq_block.id_range << dec << "\n";
+				cerr << "Reads splitter: " << hex << fastq_block.id_range << dec << "\n";
 			}
 			rs->Process(fastq_block.data, fastq_block.size, fastq_block.id_range);
 			mp_blocks->Free(fastq_block.data);
@@ -984,6 +984,12 @@ bool CReadsReader::Pop(uchar_t* &_id, uchar_t* &_sequence, uchar_t* &_plus, ucha
 	quality_len  = (uint32_t) strlen((char*) quality);
 
 	return r;
+}
+
+// ************************************************************************************
+void CReadsReader::Restart()
+{
+	block_pos = 0;
 }
 
 // ************************************************************************************

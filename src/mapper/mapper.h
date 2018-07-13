@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -78,7 +78,7 @@ class CMapper
 
 	bool check_input_files();
 	bool load_ref_seq_desc();
-	bool prepare_output_files(vector<string> &header_mapped, vector<string> &header_unmapped);
+	bool prepare_output_files(vector<string> &header_SAM, vector<pair<string, uint32_t>> &header_BAM);
 
 public:
 	CMapper();

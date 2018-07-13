@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -36,25 +36,25 @@ bool remove_temps(string index_name, string temp_dir);
 // ************************************************************************************
 void usage()
 {
-	cout << "Whisper index construction v. " << MAPPER_VERSION << "\n";
-	cout << "Usage: \n";
+	cerr << "Whisper index construction v. " << MAPPER_VERSION << "\n";
+	cerr << "Usage: \n";
 #ifdef _DEVELOPMENT_MODE
-	cout << "   whisper-index <index_name> <ref_seq_file_name> <dest_dir> <temp_dir> [stage_no]\n";
-	cout << "   whisper-index <index_name> <@ref_seq_files_name> <dest_dir> <temp_dir> [stage_no]\n";
-	cout << "Stages:\n";
-	cout << "   0 - all stages (default)\n";
-	cout << "   1 - ref. seq. construction (direct)\n";
-	cout << "   2 - ref. seq. construction (rev. comp.)\n";
-	cout << "   3 - ref. seq. compaction (direct)\n";
-	cout << "   4 - ref. seq. compaction (rev. comp.)\n";
-	cout << "   5 - suffix array construction (direct)\n";
-	cout << "   6 - suffix array construction (rev. comp.)\n";
-	cout << "   7 - LUT for suffix array construction (direct)\n";
-	cout << "   8 - LUT for suffix array construction (rev. comp.)\n";
-	cout << "   9 - removing all temporary files\n";
+	cerr << "   whisper-index <index_name> <ref_seq_file_name> <dest_dir> <temp_dir> [stage_no]\n";
+	cerr << "   whisper-index <index_name> <@ref_seq_files_name> <dest_dir> <temp_dir> [stage_no]\n";
+	cerr << "Stages:\n";
+	cerr << "   0 - all stages (default)\n";
+	cerr << "   1 - ref. seq. construction (direct)\n";
+	cerr << "   2 - ref. seq. construction (rev. comp.)\n";
+	cerr << "   3 - ref. seq. compaction (direct)\n";
+	cerr << "   4 - ref. seq. compaction (rev. comp.)\n";
+	cerr << "   5 - suffix array construction (direct)\n";
+	cerr << "   6 - suffix array construction (rev. comp.)\n";
+	cerr << "   7 - LUT for suffix array construction (direct)\n";
+	cerr << "   8 - LUT for suffix array construction (rev. comp.)\n";
+	cerr << "   9 - removing all temporary files\n";
 #else
-	cout << "   whisper-index <index_name> <ref_seq_file_name> <dest_dir> <temp_dir>\n";
-	cout << "   whisper-index <index_name> <@ref_seq_files_name> <dest_dir> <temp_dir>\n";
+	cerr << "   whisper-index <index_name> <ref_seq_file_name> <dest_dir> <temp_dir>\n";
+	cerr << "   whisper-index <index_name> <@ref_seq_files_name> <dest_dir> <temp_dir>\n";
 #endif
 
 	exit(0);
@@ -74,7 +74,7 @@ bool parse_params(int argc, char **argv)
 		ifstream inf(argv[2]+1);
 		if(!inf.good())
 		{
-			cout << "Cannot open file : " << string(argv[2]+1) << "\n";
+			cerr << "Cannot open file : " << string(argv[2]+1) << "\n";
 			return false;
 		}
 
@@ -99,14 +99,14 @@ bool parse_params(int argc, char **argv)
 // ************************************************************************************
 bool remove_temps(string index_name, string temp_dir)
 {
-	cout << "\n***** Stage 9. Removing temporary files\n";
+	cerr << "\n***** Stage 9. Removing temporary files\n";
 
 	string name = temp_dir + index_name + EXT_REF_SEQ_DIR;
-	cout << "Removing " << name << "\n";
+	cerr << "Removing " << name << "\n";
 	remove(name.c_str());
 
 	name = temp_dir + index_name + EXT_REF_SEQ_RC;
-	cout << "Removing " << name << "\n";
+	cerr << "Removing " << name << "\n";
 	remove(name.c_str());
 
 	return true;
@@ -163,7 +163,7 @@ int main(int argc, char **argv)
 		if(!remove_temps(index_name, temp_dir))
 			return 0;
 			
-	cout << "\nCompleted.\n";
+	cerr << "\nCompleted.\n";
 	
 	return 0;
 }

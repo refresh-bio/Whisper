@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -46,11 +46,13 @@ CSamGenerator::CSamGenerator(CParams *params, CObjects *objects, CRefSeqDesc *_r
 
 	q_map_reads     = objects->q_map_reads;
 	mp_fastq_blocks = objects->mp_fastq_blocks;
-	mp_sam_parts    = objects->mp_sam_parts;
+//	mp_sam_parts    = objects->mp_sam_parts;
 	q_sam_blocks    = objects->q_sam_blocks;
 	mp_ext_cigar    = objects->mp_ext_cigar;
 	mp_cigar		= objects->mp_cigar;
+	mp_cigar_bin    = objects->mp_cigar_bin;
 	mp_mdz			= objects->mp_mdz;
+	ptr_pool = objects->ptr_pool;
 
 	progress = objects->progress;
 
@@ -73,16 +75,17 @@ CSamGenerator::CSamGenerator(CParams *params, CObjects *objects, CRefSeqDesc *_r
 	id_bytes             = BITS2BYTES(params->id_bits_total);
 
 	gzipped_SAM_level = params->gzipped_SAM_level;
+	store_BAM = params->store_BAM;
 
-	mapped_part_size     = params->sam_part_size;
-
-	gzip = new CGzipMember(gzipped_SAM_level);
-	
-	mapped_part_reserve = 1 << 16;
-	if (gzipped_SAM_level)		// if gzip will be used, it is necessary to consider the potential data expansion
+	if (store_BAM)
 	{
-		// The rule according to compressBound() function from zlib
-		mapped_part_reserve += (mapped_part_size >> 12) + (mapped_part_size >> 14) + (mapped_part_size >> 15) + 13 + 20;
+		sam_part = nullptr;
+		bam_part = new CBamPart(params, objects);
+	}
+	else
+	{
+		sam_part = new CSamPart(params, objects);
+		bam_part = nullptr;
 	}
 
 	ref_seq_desc         = _ref_seq_desc;
@@ -104,8 +107,7 @@ CSamGenerator::CSamGenerator(CParams *params, CObjects *objects, CRefSeqDesc *_r
 		params->clipping_score);
 	
 	insertSizeModel = new InsertSizeModel(
-//		max_mate_distance / 2, max_mate_distance / 8, 100, 10000,
-		499, 49, 100, 10000,
+		max_mate_distance / 2, max_mate_distance / 8, 100, 10000,
 		params->high_confidence_sigmas, params->penalty_saturation_sigmas, scoring);
 
 //	int max_text_len = insertSizeModel->mean() + insertSizeModel->getHighConfidenceDev()
@@ -149,6 +151,9 @@ CSamGenerator::CSamGenerator(CParams *params, CObjects *objects, CRefSeqDesc *_r
 
 	tmp_read_sequence = new uchar_t[params->max_read_len + 1];
 	tmp_ref_sequence  = new uchar_t[max_text_len +1];
+
+	mapping_desc[0].reserve(max_no_mappings + 1);
+	mapping_desc[1].reserve(max_no_mappings + 1);
 }
 
 // ************************************************************************************
@@ -168,7 +173,10 @@ CSamGenerator::~CSamGenerator()
 	delete[] tmp_read_sequence;
 	delete[] tmp_ref_sequence;
 
-	delete gzip;
+	if(sam_part)
+		delete sam_part;
+	if (bam_part)
+		delete bam_part;
 
 	running_stats->AddValues(1000002, read_bytes);
 }
@@ -203,12 +211,12 @@ void CSamGenerator::operator()()
 		if (q_map_reads->Pop(mapped_reads))
 		{
 			int bin_id = (mapped_reads.fastq_blocks.front().id_range >> (id_bits_subgroup + id_bits_local));
-			cout << bin_id << "     " << endl; fflush(stdout);
+			cerr << bin_id << "     " << endl; fflush(stderr);
 
 			if (bin_id == 160)
 			{
 				if (verbosity_level >= 2)
-					cout << "SAM generation of results bin no. : " << (mapped_reads.fastq_blocks.front().id_range >> (id_bits_subgroup + id_bits_local)) << "\n";
+					cerr << "SAM generation of results bin no. : " << (mapped_reads.fastq_blocks.front().id_range >> (id_bits_subgroup + id_bits_local)) << "\n";
 
 				try {
 					sort_mapping_results();
@@ -216,7 +224,7 @@ void CSamGenerator::operator()()
 				catch (...)
 				{
 					cerr << "\nError in sort\n";
-					fflush(stdout);
+					fflush(stderr);
 				}
 
 				try {
@@ -228,7 +236,7 @@ void CSamGenerator::operator()()
 				catch (...)
 				{
 					cerr << "\nError in processing bin\n";
-					fflush(stdout);
+					fflush(stderr);
 				}
 			}
 			else
@@ -258,7 +266,7 @@ void CSamGenerator::operator()()
 		if(q_map_reads->Pop(mapped_reads))
 		{
 			if(verbosity_level >= 2)
-				cout << "SAM generation of results bin no. : " << (mapped_reads.fastq_blocks.front().id_range >> (id_bits_subgroup + id_bits_local)) << "\n";
+				cerr << "SAM generation of results bin no. : " << (mapped_reads.fastq_blocks.front().id_range >> (id_bits_subgroup + id_bits_local)) << "\n";
 
 			sort_mapping_results();
 
@@ -320,7 +328,10 @@ void CSamGenerator::sort_mapping_results()
 	read_id_t id;
 	uint64_t no_mappings_in_curr_read = 0;
 
-	ptrs = new uint64_t[max_no_map_res];
+	if(max_no_map_res > ptrs.capacity())
+		ptrs.reserve(max_no_map_res * 1.1);		// 10% overhead to reduce the number of reallocations for future bins
+
+	ptrs.resize(max_no_map_res);
 
 	uint32_t rec_size = sizeof(ref_pos_t) + 1 + 1;
 
@@ -331,16 +342,18 @@ void CSamGenerator::sort_mapping_results()
 		ptrs[last_idx] = i;
 		uint64_t no_mappings;
 		LoadUInt(data+i+id_bytes, no_mappings, mapping_counter_size);
-		uint32_t no_stored_mappings = (uint32_t) MIN(no_mappings, max_no_mappings);
+		// !!! Tymczasowo ignorujemy max_no_mappings
+		//		uint32_t no_stored_mappings = (uint32_t) MIN(no_mappings, max_no_mappings);
+		uint32_t no_stored_mappings = (uint32_t) no_mappings;
 
 		i += id_bytes + mapping_counter_size + rec_size * no_stored_mappings;
 	}
 
 	if (verbosity_level >= 2)
-		cout << "Sorting " << max_no_map_res-last_idx << " results\n";
+		cerr << "Sorting " << max_no_map_res-last_idx << " results\n";
 	
 	// Sort pointers to read mapping results
-	sort(ptrs+last_idx, ptrs+max_no_map_res, [&](uint64_t x, uint64_t y){
+	sort(ptrs.data()+last_idx, ptrs.data()+max_no_map_res, [&](uint64_t x, uint64_t y){
 		for(uint32_t i = 0; i < id_bytes; ++i)
 			if(data[x+i] < data[y+i])
 				return true;
@@ -351,7 +364,7 @@ void CSamGenerator::sort_mapping_results()
 
 	// Reorganizing mapped results according to read id
 	uint64_t res_idx = 0;
-	data_srt = (uchar_t*) ptrs;
+	data_srt = (uchar_t*) ptrs.data();
 	
 	for(uint64_t i = last_idx; i < max_no_map_res; ++i)
 	{
@@ -370,15 +383,17 @@ void CSamGenerator::sort_mapping_results()
 			no_mappings_in_curr_read = 0;
 		}
 
-		uint64_t no_stored_mappings = MIN(no_mappings_in_curr_read, max_no_mappings);
+// !!! Tymczasowo ladujemy tu wszystkie mapowania a nie tylko pierwszych 1024
+//		uint64_t no_stored_mappings = MIN(no_mappings_in_curr_read, max_no_mappings);
+		uint64_t no_stored_mappings = no_mappings_in_curr_read;
 		no_mappings_in_curr_read += no_mappings_in_curr_part;
 		StoreUInt(data_srt + res_idx - mapping_counter_size - no_stored_mappings*rec_size, no_mappings_in_curr_read, mapping_counter_size);
 
-		if(no_stored_mappings < max_no_mappings)
+//		if(no_stored_mappings < max_no_mappings)
 		{
 			uint64_t no_mappings_to_copy = no_mappings_in_curr_part;
-			if(no_stored_mappings + no_mappings_to_copy > max_no_mappings)
-				no_mappings_to_copy = max_no_mappings - no_stored_mappings;
+//			if(no_stored_mappings + no_mappings_to_copy > max_no_mappings)
+//				no_mappings_to_copy = max_no_mappings - no_stored_mappings;
 			copy_n(data+ptrs[i]+id_bytes+mapping_counter_size, rec_size*no_mappings_to_copy, data_srt+res_idx);
 			res_idx += rec_size * no_mappings_to_copy;
 		}
@@ -394,22 +409,31 @@ void CSamGenerator::sort_mapping_results()
 // ************************************************************************************
 void CSamGenerator::push_mapped_part()
 {
-	if (gzipped_SAM_level == 0)
+	if (store_BAM)
 	{
-		q_sam_blocks->Push(sam_block_t(mapped_part, mapped_part_pos, sam_results_t::mapped));
+		q_sam_blocks->Push(bam_part->GetBlock());
 	}
 	else
 	{
+		if (gzipped_SAM_level == 0)
+		{
+
+	//		q_sam_blocks->Push(sam_block_t(mapped_part, mapped_part_pos, sam_results_t::mapped));
+			q_sam_blocks->Push(sam_part->GetBlock());
+		}
+		else
+		{
 #ifndef _DEBUG
-		uchar_t *gz_buffer;
-		mp_sam_parts->Reserve(gz_buffer);
-		
-		size_t comp_size = gzip->Compress(mapped_part, mapped_part_pos, gz_buffer, mapped_part_size);
+			uchar_t *gz_buffer;
+			//		mp_sam_parts->Reserve(gz_buffer);
 
-		q_sam_blocks->Push(sam_block_t(gz_buffer, comp_size, sam_results_t::mapped));
+			//		size_t comp_size = gzip->Compress(mapped_part, mapped_part_pos, gz_buffer, mapped_part_size);
 
-		mp_sam_parts->Free(mapped_part);
+			//		q_sam_blocks->Push(sam_block_t(gz_buffer, comp_size, sam_results_t::mapped));
+
+			//		mp_sam_parts->Free(mapped_part);
 #endif
+		}
 	}
 }
 
@@ -429,8 +453,10 @@ void CSamGenerator::process_group_se()
 		string ref_seq_name;
 		uint32_t id_len, sequence_len, plus_len, quality_len;
 
-		mp_sam_parts->Reserve(mapped_part);
-		mapped_part_pos = 0;
+		if (store_BAM)
+			bam_part->Reserve();
+		else
+			sam_part->Reserve();
 	
 		read_id = p.id_range;
 
@@ -487,6 +513,8 @@ void CSamGenerator::process_group_pe()
 
 	uint32_t no_fastq_blocks = (uint32_t) fastq_blocks[0].size();
 
+	insertSizeModel->reset();
+
 	// Process pairs of blocks
 	for(uint32_t i = 0; i < no_fastq_blocks; ++i)
 	{
@@ -495,8 +523,12 @@ void CSamGenerator::process_group_pe()
 		string ref_seq_name[2];
 		uint32_t id_len[2], sequence_len[2], plus_len[2], quality_len[2];
 
-		mp_sam_parts->Reserve(mapped_part);
-		mapped_part_pos = 0;
+		if (store_BAM)
+			bam_part->Reserve();
+		else
+			sam_part->Reserve();
+//		mp_sam_parts->Reserve(mapped_part);
+//		mapped_part_pos = 0;
 
 		read_id[0] = fastq_blocks[0][i].id_range;
 		read_id[1] = fastq_blocks[1][i].id_range;
@@ -508,13 +540,37 @@ void CSamGenerator::process_group_pe()
 		reads_readers[1]->SetBlock(fastq_blocks[1][i].data, fastq_blocks[1][i].size);
 
 		adjust_pos_in_results(read_id[0], data_ptr);
+		uchar_t* ptr_copy = data_ptr;
 
-		// trening modelu
-		insertSizeModel->reset();
+		// train a model on the first block
+		if (i == 0) {
+			bool continueTraining = true;
+			while (continueTraining) {
+				bool data_present = true;
+				for (uint32_t j = 0; j < 2; ++j)
+					data_present &= reads_readers[j]->Pop(id[j], sequence[j], plus[j], quality[j], id_len[j], sequence_len[j], plus_len[j], quality_len[j]);
+
+				if (!data_present)
+					break;
+
+				continueTraining = update_model(read_id[0], id, sequence, id_len, sequence_len, data_ptr);
+				
+				read_id[0] += 2;
+				read_id[1] += 2;
+			}
+
+			// restore position
+			read_id[0] = fastq_blocks[0][i].id_range;
+			read_id[1] = fastq_blocks[1][i].id_range;
+
+			data_ptr = ptr_copy;
+			adjust_pos_in_results(read_id[0], data_ptr);
+			reads_readers[0]->Restart();
+			reads_readers[1]->Restart();
+		}
 
 		while(true)
-		{
-			
+		{			
 			bool data_present = true;
 			for(uint32_t j = 0; j < 2; ++j)
 				data_present &= reads_readers[j]->Pop(id[j], sequence[j], plus[j], quality[j], id_len[j], sequence_len[j], plus_len[j], quality_len[j]);
@@ -543,8 +599,11 @@ void CSamGenerator::process_group_pe()
 // ************************************************************************************
 void CSamGenerator::free_reads()
 {
-	delete[] mapped_reads.results.data;
-	delete[] ptrs;
+//	delete[] mapped_reads.results.data;
+//	delete[] ptrs;
+	
+	ptr_pool->Release(mapped_reads.results.data);
+	ptrs.clear();
 
 	mem_monitor->Decrease(mapped_reads.results.size*2);
 }
@@ -616,7 +675,7 @@ bool CSamGenerator::find_id_pair(read_id_t read_id, uchar_t *data_ptr, uchar_t *
 
 // ************************************************************************************
 // Extracts CIGAR and MDZ from internal extended cigar format
-void CSamGenerator::extract_cigar_and_mdz(const uchar_t * ext_cigar, uchar_t *& cigar, uchar_t *& mdz)
+int CSamGenerator::extract_cigar_and_mdz(const uchar_t * ext_cigar, uchar_t * cigar, uchar_t * mdz)
 {
 	// auxiliary enum type 
 	enum MappingState {Match, Mismatch, Insertion, Deletion, Begin, End, Clipping};
@@ -625,7 +684,7 @@ void CSamGenerator::extract_cigar_and_mdz(const uchar_t * ext_cigar, uchar_t *& 
 	const uchar_t* ext_c = ext_cigar;
 	uchar_t* cigar_c = cigar;
 	uchar_t* mdz_c = mdz;
-
+	
 	if (ext_cigar) {
 		int counters[7] = { 0 }; // counters for all states
 		int cnt_match_mismatch = 0; // counter for continuous match-mismatch state
@@ -739,8 +798,150 @@ void CSamGenerator::extract_cigar_and_mdz(const uchar_t * ext_cigar, uchar_t *& 
 
 	*cigar_c = 0;
 	*mdz_c = 0;
-
+	
+	return cigar_c - cigar;
 }
+
+
+// ************************************************************************************
+// Extracts binary CIGAR and MDZ from internal extended cigar format
+int CSamGenerator::extract_cigarbin_and_mdz(const uchar_t * ext_cigar, uint32_t * cigar_bin, uchar_t * mdz)
+{
+	// auxiliary enum type 
+	enum MappingState { Match, Mismatch, Insertion, Deletion, Begin, End, Clipping };
+
+	enum OperationCode { M_op, I_op, D_op, N_op, S_op, H_op, P_op};
+
+	// iterate over all ext_cigar symbols
+	const uchar_t* ext_c = ext_cigar;
+	uint32_t* cigar_c = cigar_bin;
+	uchar_t* mdz_c = mdz;
+
+	if (ext_cigar) {
+		int counters[7] = { 0 }; // counters for all states
+		int cnt_match_mismatch = 0; // counter for continuous match-mismatch state
+		int cnt_match_ignoring_insert = 0; // counter for continuous match-insertions
+		MappingState currentState = Begin;
+		MappingState prevState = Begin;
+
+		while (currentState != End) {
+
+			// detect states and fill MDZ
+
+			if (*ext_c == '$') {
+				// clipping 
+				currentState = Clipping;
+				++ext_c;
+			}
+			else if (*ext_c == 0) {
+				// end state
+				currentState = End;
+				// write number of previous matches
+				if (cnt_match_ignoring_insert > 0) {
+					mdz_c += CNumericConversions::Int2PChar(cnt_match_ignoring_insert, mdz_c);
+				}
+			}
+			else if (*ext_c == '.') {
+				// match - do nothing
+				++ext_c;
+				currentState = Match;
+			}
+			else if (*ext_c == '#') {
+				// insertion in read - do nothing
+				++ext_c;
+				++ext_c;
+				currentState = Insertion;
+			}
+			else {
+				// mismatch or deletion - write number of previous matches
+				mdz_c += CNumericConversions::Int2PChar(cnt_match_ignoring_insert, mdz_c);
+				cnt_match_ignoring_insert = 0;
+
+				if (*ext_c == '^') {
+					// deletion in read - write two elements in MDZ
+					*mdz_c++ = *ext_c++;
+					*mdz_c++ = *ext_c++;
+					currentState = Deletion;
+				}
+				else {
+					// put symbol in MDZ
+					*mdz_c++ = *ext_c++;
+					currentState = Mismatch;
+				}
+			}
+
+			// update counters
+			++counters[currentState];
+
+			if (currentState == Match) {
+				++cnt_match_mismatch;
+				++cnt_match_ignoring_insert;
+			}
+			else if (currentState == Mismatch) {
+				++cnt_match_mismatch;
+			}
+
+
+			// state change (excluding transition from Begin, including transition to End)
+			if ((currentState != prevState) && (prevState != Begin)) {
+
+				// clipping -> X 
+				if (prevState == Clipping) {
+					//cigar_c += CNumericConversions::Int2PChar(counters[Clipping], cigar_c);
+					//*cigar_c++ = 'S';
+					*cigar_c++ = counters[Clipping] << 4 | S_op;
+				}
+
+				// insertion -> X
+				else if (prevState == Insertion) {
+					//cigar_c += CNumericConversions::Int2PChar(counters[Insertion], cigar_c);
+					//*cigar_c++ = 'I';
+					*cigar_c++ = counters[Insertion] << 4 | I_op;
+				}
+				// deletion -> X
+				else if (prevState == Deletion) {
+					//cigar_c += CNumericConversions::Int2PChar(counters[Deletion], cigar_c);
+					//*cigar_c++ = 'D';
+					*cigar_c++ = counters[Deletion] << 4 | D_op;
+				}
+				// match -> X
+				else if (prevState == Match) {
+					//	cnt_match_mismatch += counters[Match];
+					//	cnt_match_insert += counters[Match];
+
+					// match -> not mismatch
+					if (currentState != Mismatch) {
+						//cigar_c += CNumericConversions::Int2PChar(cnt_match_mismatch, cigar_c);
+						//*cigar_c++ = 'M';
+						*cigar_c++ = cnt_match_mismatch << 4 | M_op;
+						cnt_match_mismatch = 0;
+					}
+				}
+				// mismatch -> not match
+				else if (prevState == Mismatch) {
+					//cnt_match_mismatch += counters[Mismatch];
+					// mismatch -> insertion | deletion
+					if (currentState != Match) {
+						//cigar_c += CNumericConversions::Int2PChar(cnt_match_mismatch, cigar_c);
+						//*cigar_c++ = 'M';
+						*cigar_c++ = cnt_match_mismatch << 4 | M_op;
+						cnt_match_mismatch = 0;
+					}
+				}
+
+				counters[prevState] = 0;
+			}
+
+			prevState = currentState;
+		}
+	}
+
+//	*cigar_c = 0;
+	*mdz_c = 0;
+
+	return cigar_c - cigar_bin;
+}
+
 
 // ************************************************************************************
 // Adjust position in results
@@ -765,7 +966,9 @@ bool CSamGenerator::adjust_pos_in_results(read_id_t read_id, uchar_t *&data_ptr)
 
 		data_ptr += id_bytes + mapping_counter_size;
 
-		uint64_t no_stored_mappings = MIN(no_mappings, max_no_mappings);
+		// !!! Tymczasowo ignorujemy max_no_mappings
+//		uint64_t no_stored_mappings = MIN(no_mappings, max_no_mappings);
+		uint64_t no_stored_mappings = no_mappings;
 		data_ptr += no_stored_mappings * rec_size;
 	}
 
@@ -784,183 +987,141 @@ inline uint32_t CSamGenerator::trim_id(uchar_t *id, uint32_t id_len)
 }
 
 // ************************************************************************************
-// Append field to line
-inline void CSamGenerator::append_part(uchar_t *s, uint32_t s_len, uchar_t *mapped_part, uint64_t &mapped_part_pos, bool add_tab = true)
-{
-	copy_n(s, s_len, mapped_part+mapped_part_pos);
-	mapped_part_pos += s_len;
-
-	if(add_tab)
-		mapped_part[mapped_part_pos++] = '\t';
-}
-
-// ************************************************************************************
-// Append field to line
-inline void CSamGenerator::append_part(uchar_t *s, uchar_t *mapped_part, uint64_t &mapped_part_pos, bool add_tab = true)
-{
-	while(*s)
-		mapped_part[mapped_part_pos++] = *s++;
-	
-	if(add_tab)
-		mapped_part[mapped_part_pos++] = '\t';
-}
-
-// ************************************************************************************
-// Append reversed field to line 
-inline void CSamGenerator::append_part_rev(uchar_t *s, uint32_t s_len, uchar_t *mapped_part, uint64_t &mapped_part_pos, bool add_tab = true)
-{
-	for(int32_t i = s_len-1; i >= 0; --i)
-		mapped_part[mapped_part_pos++] = s[i];
-
-	if(add_tab)
-		mapped_part[mapped_part_pos++] = '\t';
-}
-
-// ************************************************************************************
-// Append reversed and complemented field to line
-inline void CSamGenerator::append_part_rev_comp(uchar_t *s, uint32_t s_len, uchar_t *mapped_part, uint64_t &mapped_part_pos, bool add_tab = true)
-{
-	for(int32_t i = s_len-1; i >= 0; --i)
-	{
-		switch(s[i])
-		{
-		case 'A':
-			mapped_part[mapped_part_pos++] = 'T';
-			break;
-		case 'C':
-			mapped_part[mapped_part_pos++] = 'G';
-			break;
-		case 'G':
-			mapped_part[mapped_part_pos++] = 'C';
-			break;
-		case 'T':
-			mapped_part[mapped_part_pos++] = 'A';
-			break;
-		default:
-			mapped_part[mapped_part_pos++] = s[i];
-			break;
-		}
-	}
-
-	if(add_tab)
-		mapped_part[mapped_part_pos++] = '\t';
-}
-
-// ************************************************************************************
-inline void CSamGenerator::append_part(string s, uchar_t *mapped_part, uint64_t &mapped_part_pos, bool add_tab = true)
-{
-	auto s_len = s.length();
-
-	copy_n(s.c_str(), s_len, mapped_part+mapped_part_pos);
-	mapped_part_pos += s_len;
-
-	if(add_tab)
-		mapped_part[mapped_part_pos++] = '\t';
-}
-
-// ************************************************************************************
-inline void CSamGenerator::append_part(int32_t x, uchar_t *mapped_part, uint64_t &mapped_part_pos, bool add_tab = true)
-{
-	mapped_part_pos += SInt2PChar(x, mapped_part+mapped_part_pos);
-
-	if(add_tab)
-		mapped_part[mapped_part_pos++] = '\t';
-}
-
-// ************************************************************************************
-inline void CSamGenerator::append_part(double x, int prec, uchar_t *mapped_part, uint64_t &mapped_part_pos, bool add_tab = true)
-{
-	mapped_part_pos += SDouble2PChar(x, prec, mapped_part + mapped_part_pos);
-
-	if (add_tab)
-		mapped_part[mapped_part_pos++] = '\t';
-}
-
-// ************************************************************************************
-// Close the last line
-inline void CSamGenerator::close_line(uchar_t *mapped_part, uint64_t &mapped_part_pos)
-{
-	mapped_part[mapped_part_pos-1] = '\n';	// replace last tab by new-line
-}
-
-// ************************************************************************************
-inline void CSamGenerator::store_mapping_result(uchar_t *&buffer, uint64_t &pos,
-	uchar_t *id, uint32_t id_len, uint32_t flag, string ref_seq_name, uint32_t ref_seq_pos, uint32_t mapping_quality, uchar_t* cigar,
-	string mate_ref_seq_name, uint32_t mate_ref_seq_pos, int32_t template_len, genome_t dir, uchar_t *sequence, uint32_t sequence_len,
+inline void CSamGenerator::store_mapping_result(
+	uchar_t *id, uint32_t id_len, uint32_t flag, int32_t ref_seq_id, uint32_t ref_seq_pos, uint32_t mapping_quality, uchar_t* cigar, uint32_t *cigar_bin, uint32_t cigar_bin_len,
+	int32_t mate_ref_seq_id, uint32_t mate_ref_seq_pos, int32_t template_len, genome_t dir, int32_t ref_length, uchar_t *sequence, uint32_t sequence_len,
 	uchar_t *qualities, uint32_t edit_distance, uchar_t* mdz, double score, MatchingMethod method)
 {
-	check_buffers_occupation();
+//	check_buffers_occupation();
+	
+	if (store_BAM)
+	{
+		bam_part->SetRefId(ref_seq_id);
+		if(ref_seq_id == -2)
+			bam_part->SetPos(mate_ref_seq_pos);
+		else
+			bam_part->SetPos(ref_seq_pos);
+		bam_part->SetRefLength(ref_length);
+		bam_part->SetDirection(dir);
 
-	// ***************** Obligatory fields
-	// Read id
-	append_part(id+1, id_len-1, buffer, pos);
+		bam_part->SetMapq(mapping_quality);
+		bam_part->SetFlag(flag);
+		bam_part->SetSeq(sequence, sequence_len);
+		if (mate_ref_seq_id == -2)
+			bam_part->SetNextRefId(ref_seq_id);
+		else
+			bam_part->SetNextRefId(mate_ref_seq_id);
+		bam_part->SetNextPos(mate_ref_seq_pos);
+		bam_part->SetTlen(template_len);
+		bam_part->SetReadName(id+1);
+		bam_part->SetCigar(cigar_bin, cigar_bin_len);
+		bam_part->SetQual(qualities);
 
-	// Flags
-	append_part(flag, buffer, pos);
+		bam_part->AddAuxInt(a_NM, edit_distance);
+		if (mdz)
+			bam_part->AddAuxString(a_MD, mdz);
+		else
+			bam_part->AddAuxString(a_MD, (uchar_t*) uc_star);
 
-	// Ref. seq. name
-	append_part(ref_seq_name, buffer, pos);
+		if (params->read_group_id.length() > 0) {
+			bam_part->AddAuxString(a_RG, (uchar_t*)params->read_group_id.c_str());
+		}
 
-	// Mapping position
-	append_part(ref_seq_pos, buffer, pos);
-
-	// Mapping quality
-	append_part(mapping_quality, buffer, pos);
-
-	// CIGAR
-	if (cigar != nullptr) {
-		append_part(cigar, buffer, pos);
-	} else {
-		append_part("*", buffer, pos);
+		bam_part->CloseLine();
 	}
-
-	// Mate ref. seq. name
-	append_part(mate_ref_seq_name, buffer, pos);
-
-	// Mate position
-	append_part(mate_ref_seq_pos, buffer, pos);
-
-	// Template len
-	append_part(template_len, buffer, pos);
-
-	// Read sequence
-	if(dir == genome_t::direct)
-		append_part(sequence, sequence_len, buffer, pos);
 	else
-		append_part_rev_comp(sequence, sequence_len, buffer, pos);
+	{
+		// ***************** Obligatory fields
+		// Read id
+		sam_part->AppendPart(id + 1, id_len - 1);
 
-	// Read qualities
-	if(dir == genome_t::direct)
-		append_part(qualities, sequence_len, buffer, pos);
-	else
-		append_part_rev(qualities, sequence_len, buffer, pos);
+		// Flags
+		sam_part->AppendPart(flag);
 
-	// ***************** Optional fields
-	// Alignment score for mate (YS:i)
+		// Ref. seq. name
+		if (ref_seq_id == -1)
+			sam_part->AppendPart("*");
+		else if (ref_seq_id == -2)
+			sam_part->AppendPart("=");
+		else
+			sam_part->AppendPart((*ref_seq_desc)[ref_seq_id].name);
 
-	// Edit distance (NM:i)
-	append_part("NM:i:", buffer, pos, false);
-	append_part(edit_distance, buffer, pos);
+		// Mapping position
+		sam_part->AppendPart(ref_seq_pos);
 
-	// Match description (MD:Z)
-	append_part("MD:Z:", buffer, pos, false);
-	if (mdz)
-		append_part(mdz, buffer, pos);
-	else
-		append_part("*", buffer, pos);
+		// Mapping quality
+		sam_part->AppendPart(mapping_quality);
 
-	append_part("AS:i:", buffer, pos, false);
-	append_part(score, 1, buffer, pos);
+		// CIGAR
+		if (cigar != nullptr) {
+			sam_part->AppendPart(cigar);
+		}
+		else {
+			sam_part->AppendPart("*");
+		}
 
-	string methodStr = method.toString();
-	append_part("XM:Z:" + methodStr, buffer, pos);
+		// Mate ref. seq. name
+		if (mate_ref_seq_id == -1)
+			sam_part->AppendPart("*");
+		else if (mate_ref_seq_id == -2 || mate_ref_seq_id == ref_seq_id)
+			sam_part->AppendPart("=");
+		else
+			sam_part->AppendPart((*ref_seq_desc)[mate_ref_seq_id].name);
 
-	append_part("MO:Z:", buffer, pos, false);
-	append_part((int)insertSizeModel->mean(), buffer, pos, false);
-	append_part("_", buffer, pos, false);
-	append_part((int)insertSizeModel->dev(), buffer, pos);
+		// Mate position
+		sam_part->AppendPart(mate_ref_seq_pos);
 
-	close_line(buffer, pos);
+		// Template len
+		sam_part->AppendPart(template_len);
+
+		// Read sequence
+		if (dir == genome_t::direct)
+			sam_part->AppendPart(sequence, sequence_len);
+		else
+			sam_part->AppendPartRevComp(sequence, sequence_len);
+
+		// Read qualities
+		if (dir == genome_t::direct)
+			sam_part->AppendPart(qualities, sequence_len);
+		else
+			sam_part->AppendPartRev(qualities, sequence_len);
+
+		// ***************** Optional fields
+		// Alignment score for mate (YS:i)
+
+		// Edit distance (NM:i)
+		sam_part->AppendPart("NM:i:", false);
+		sam_part->AppendPart(edit_distance);
+
+		// Match description (MD:Z)
+		sam_part->AppendPart("MD:Z:", false);
+		if (mdz)
+			sam_part->AppendPart(mdz);
+		else
+			sam_part->AppendPart("*");
+
+		if (params->read_group_id.length() > 0) {
+			sam_part->AppendPart("RG:Z:", false);
+			sam_part->AppendPart(params->read_group_id);
+		}
+
+#ifdef STORE_EXTRA_SAM_FIELDS
+		sam_part->AppendPart("AS:i:", false);
+		sam_part->AppendPart(score, 1);
+
+		string methodStr = method.toString();
+		sam_part->AppendPart("XM:Z:" + methodStr);
+
+		sam_part->AppendPart("MO:Z:", false);
+//		sam_part->AppendPart((int)insertSizeModel->mean(), false);
+		sam_part->AppendPart(insertSizeModel->mean(), 13, false);
+		sam_part->AppendPart("_", false);
+//		sam_part->AppendPart((int)insertSizeModel->dev());
+		sam_part->AppendPart(insertSizeModel->dev(), 13);
+#endif
+
+		sam_part->CloseLine();
+	}
 }
 
 // ************************************************************************************
@@ -968,15 +1129,17 @@ void CSamGenerator::store_mapped_read(uchar_t *id, uchar_t *sequence, uchar_t *p
 	uint32_t id_len, uint32_t sequence_len, uint32_t plus_len, uint32_t quality_len,
 	uchar_t *&data_ptr)
 {
-	
 	uchar_t perfect_cigar[10] = { 0 };
 	uchar_t perfect_mdz[10] = { 0 };
+	uint32_t perfect_cigar_bin[1] = { 0 };
+	uint32_t perfect_cigar_bin_len = 1;
 
 	int end = CNumericConversions::Int2PChar(sequence_len, perfect_cigar);
 	perfect_cigar[end] = 'M';
 	perfect_cigar[end + 1] = 0;
 	CNumericConversions::Int2PChar(sequence_len, perfect_mdz);
 	perfect_mdz[end] = 0;
+	perfect_cigar_bin[0] = sequence_len << 4;
 	
 	Evaluator<mapping_desc_t> hitEvaluator(*insertSizeModel);
 	stored_mapped++;
@@ -988,7 +1151,9 @@ void CSamGenerator::store_mapped_read(uchar_t *id, uchar_t *sequence, uchar_t *p
 
 	data_ptr += id_bytes + mapping_counter_size;
 
-	uint64_t no_stored_mappings = MIN(no_mappings, max_no_mappings);
+	// !!! Tymczasowo ignorujemy max_no_mappings
+//	uint64_t no_stored_mappings = MIN(no_mappings, max_no_mappings);
+	uint64_t no_stored_mappings = no_mappings;
 	uint32_t rec_size = sizeof(ref_pos_t) + 1 + 1;
 
 	string ref_seq_name;
@@ -999,6 +1164,8 @@ void CSamGenerator::store_mapped_read(uchar_t *id, uchar_t *sequence, uchar_t *p
 	id_len = trim_id(id, id_len);
 
 	mapping_desc[0].clear();
+
+	bool heap_constructed = false;
 
 	for (uint64_t i = 0; i < no_stored_mappings; ++i)
 	{
@@ -1019,14 +1186,31 @@ void CSamGenerator::store_mapped_read(uchar_t *id, uchar_t *sequence, uchar_t *p
 		}
 		else
 		{
-			//cout << "Error in position translation!\n";
+			//cerr << "Error in position translation!\n";
 			ref_seq_name = "??";
 			ref_seq_pos = 0;
+		}
+
+		if (mapping_desc[0].size() == max_no_mappings && !heap_constructed)
+		{
+			make_heap(mapping_desc->begin(), mapping_desc->end(), mapping_desc_comparator);
+			heap_constructed = true;
 		}
 
 		mapping_desc[0].push_back(mapping_desc_t(raw_pos, ref_seq_id, ref_seq_pos, (genome_t)dir, sequence_len, errors, nullptr));
 		mapping_desc[0].back().ref_length = sequence_len; // this will be corrected later
 		mapping_desc[0].back().score = hitEvaluator(mapping_desc[0].back());
+
+		if (heap_constructed)
+		{
+			push_heap(mapping_desc[0].begin(), mapping_desc[0].end(), mapping_desc_comparator);
+			pop_heap(mapping_desc[0].begin(), mapping_desc[0].end(), mapping_desc_comparator);
+			mapping_desc[0].pop_back();
+		}
+
+		/*mapping_desc[0].push_back(mapping_desc_t(raw_pos, ref_seq_id, ref_seq_pos, (genome_t)dir, sequence_len, errors, nullptr));
+		mapping_desc[0].back().ref_length = sequence_len; // this will be corrected later
+		mapping_desc[0].back().score = hitEvaluator(mapping_desc[0].back());*/
 
 		data_ptr += rec_size;
 		ASSERT(data_ptr <= data_srt_end, "Error 3");
@@ -1051,11 +1235,22 @@ void CSamGenerator::store_mapped_read(uchar_t *id, uchar_t *sequence, uchar_t *p
 
 		uchar_t* cigar = perfect_cigar;
 		uchar_t* mdz = perfect_mdz;
+		uint32_t *cigar_bin = perfect_cigar_bin;
+		uint32_t cigar_bin_len = perfect_cigar_bin_len;
 
 		if (mapping.method != MatchingMethod::Perfect) {
-			mp_cigar->Reserve(cigar);
 			mp_mdz->Reserve(mdz);
-			extract_cigar_and_mdz(mapping.ext_cigar, cigar, mdz);
+
+			if (store_BAM)
+			{
+				mp_cigar_bin->Reserve(cigar_bin);
+				cigar_bin_len = extract_cigarbin_and_mdz(mapping.ext_cigar, cigar_bin, mdz);
+			}
+			else
+			{
+				mp_cigar->Reserve(cigar);
+				extract_cigar_and_mdz(mapping.ext_cigar, cigar, mdz);
+			}
 		}
 
 		uint32_t flag = 0x0; // mapped single segment
@@ -1063,26 +1258,152 @@ void CSamGenerator::store_mapped_read(uchar_t *id, uchar_t *sequence, uchar_t *p
 		if ((mapping.dir) == genome_t::rev_comp)
 			flag += 0x10;							// read is reverse complemented
 		
-		store_mapping_result(mapped_part, mapped_part_pos,
-			id, id_len, flag, (*ref_seq_desc)[mapping.ref_seq_id].name, mapping.ref_seq_pos, mapping.mapq, cigar,
-			"*", 0, 0, mapping.dir, sequence, sequence_len, quality,
+		store_mapping_result(
+			id, id_len, flag, mapping.ref_seq_id, mapping.ref_seq_pos, mapping.mapq, cigar, cigar_bin, cigar_bin_len,
+			-1, 0, 0, mapping.dir, mapping.ref_length, sequence, sequence_len, quality,
 			mapping.err_edit_distance, mdz, mapping.score, mapping.method);
 
 		if (mapping.method != MatchingMethod::Perfect) {
-			mp_cigar->Free(cigar);
 			mp_mdz->Free(mdz);
+			if(store_BAM)
+				mp_cigar_bin->Free(cigar_bin);
+			else
+				mp_cigar->Free(cigar);
 			mp_ext_cigar->Free(mapping.ext_cigar);
 		}
 	}
 	else {
-		store_mapping_result(mapped_part, mapped_part_pos,
+		store_mapping_result(
 			id, id_len, 0x04,
-			"*", 0, 0, nullptr,
-			"*", 0, 0,
-			genome_t::direct, sequence, sequence_len, quality,
+			-1, 0, 0, nullptr, nullptr, 0,
+			-1, 0, 0,
+			genome_t::direct, 1, sequence, sequence_len, quality,
 			0, nullptr, 0, MatchingMethod::Unmatched);
 	}	
 }
+
+
+bool  CSamGenerator::update_model(read_id_t read_id, uchar_t *id[2], uchar_t *sequence[2],
+	uint32_t id_len[2], uint32_t sequence_len[2], uchar_t *&data_ptr)
+{
+	check_buffers_occupation();
+
+	Evaluator<mapping_desc_t> hitEvaluator(*insertSizeModel);
+	Evaluator<mapping_pair_t> pairEvaluator(*insertSizeModel);
+
+	for (uint32_t r = 0; r < 2; ++r)
+		id_len[r] = trim_id(id[r], id_len[r]);
+
+	// Load mapping results for both reads
+	for (uint32_t r = 0; r < 2; ++r)
+	{
+		mapping_desc[r].clear();
+		uint64_t no_mappings;
+
+		// Check whether there are any mapping results for current read id
+		if (!find_id(read_id + r, data_ptr, data_srt_end))
+			continue;
+
+		LoadUInt(data_ptr + id_bytes, no_mappings, mapping_counter_size);
+		ASSERT(data_ptr < data_srt_end, "Error 1");
+
+		data_ptr += id_bytes + mapping_counter_size;
+		ASSERT(data_ptr < data_srt_end, "Error 2");
+
+		// !!! Tymczasowo wczytujemy wszystkie mapowania a nie tylko 1024
+		//		uint64_t no_stored_mappings = MIN(no_mappings, max_no_mappings);
+		uint64_t no_stored_mappings = no_mappings;
+		uint32_t rec_size = sizeof(ref_pos_t) + 1 + 1;
+
+		int32_t ref_seq_id;
+		string ref_seq_name;
+		int32_t ref_seq_pos;
+
+		bool heap_constructed = false;
+
+		for (uint64_t i = 0; i < no_stored_mappings; ++i)
+		{
+			ref_pos_t raw_pos;
+			uint64_t tmp;
+
+			ASSERT(data_ptr + 6 <= data_srt_end, "Error 2b");
+
+			LoadUInt(data_ptr, tmp, sizeof(ref_pos_t));
+			raw_pos = (ref_pos_t)tmp;
+			uchar_t dir = data_ptr[sizeof(ref_pos_t)];
+			uchar_t errors = data_ptr[sizeof(ref_pos_t) + 1];
+
+			if (ref_seq_desc->Translate(raw_pos, ref_seq_name, ref_seq_pos, ref_seq_id, id[r]))
+			{
+				if (((genome_t)dir) == genome_t::rev_comp)
+					ref_seq_pos -= sequence_len[r] - 1;
+			}
+			else
+			{
+				//cerr << "Error in position translation!\n";
+				ref_seq_name = "??";
+				ref_seq_pos = 0;
+			}
+
+			if (mapping_desc[r].size() == max_no_mappings && !heap_constructed)
+			{
+				make_heap(mapping_desc->begin(), mapping_desc->end(), mapping_desc_comparator);
+				heap_constructed = true;
+			}
+
+			mapping_desc[r].push_back(mapping_desc_t(raw_pos, ref_seq_id, ref_seq_pos, (genome_t)dir, sequence_len[r], errors, nullptr));
+			mapping_desc[r].back().ref_length = sequence_len[r]; // this will be corrected later
+			mapping_desc[r].back().score = hitEvaluator(mapping_desc[r].back());
+
+			if (heap_constructed)
+			{
+				push_heap(mapping_desc[r].begin(), mapping_desc[r].end(), mapping_desc_comparator);
+				pop_heap(mapping_desc[r].begin(), mapping_desc[r].end(), mapping_desc_comparator);
+				mapping_desc[r].pop_back();
+			}
+
+			data_ptr += rec_size;
+			ASSERT(data_ptr <= data_srt_end, "Error 3");
+		}
+	}
+
+	// mask indicating exact matches
+	uint32_t exactMask = 0;
+
+	std::vector<mapping_desc_t*> hits_se[2];
+
+	// Sort mapping positions and remove redundant results 
+	for (uint32_t i = 0; i < 2; ++i) {
+		mapping_desc[i].reserve(2 * (mapping_desc[i].size() + mapping_desc[!i].size())); // for each hit we can find 2 new mate hits (myers, clipping) 
+		generate_unique_hits(mapping_desc[i], hits_se[i]);
+
+		auto it = find_if(hits_se[i].begin(), hits_se[i].end(), [](const mapping_desc_t* x)->bool {
+			return x->err_edit_distance == 0;
+		});
+
+		if (it != hits_se[i].end()) {
+			exactMask |= (1u << i); // use counter as mask
+		}
+
+		hits_se[i].reserve(hits_se[i].size() + hits_se[!i].size());
+	}
+
+	// from mask to counter: 11->2, 10->1, 01->1, 00->0
+	if (exactMask == 3) { exactMask = 2; }
+	else if (exactMask == 2) { exactMask = 1; }
+
+	// unique hits
+	if (hits_se[0].size() == 1 && hits_se[1].size() == 1) {
+		mapping_pair_t mapping(hits_se[0][0], hits_se[1][0]);
+		int tlen = mapping.calculateInsertSize();
+		if (tlen <= max_mate_distance) {
+			insertSizeModel->addSample(tlen);
+		}
+	}
+
+	return insertSizeModel->getSamplesCount() < insertSizeModel->getMinSamplesCount();
+}
+
 
 // ************************************************************************************
 void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], uchar_t *sequence[2], uchar_t *plus[2], uchar_t *quality[2],
@@ -1091,12 +1412,16 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 {
 	uchar_t perfect_cigar[2][10] = { { 0 },{ 0 } };
 	uchar_t perfect_mdz[2][10] = { { 0 },{ 0 } };
+	uint32_t perfect_cigar_bin[2][1] = { { 0 },{ 0 } };
+	uint32_t perfect_cigar_bin_len[2] = { 1, 1 };
+
 	for (int r = 0; r < 2; ++r) {
 		int end = CNumericConversions::Int2PChar(sequence_len[r], perfect_cigar[r]);
 		perfect_cigar[r][end] = 'M';
 		perfect_cigar[r][end + 1] = 0;
 		CNumericConversions::Int2PChar(sequence_len[r], perfect_mdz[r]);
 		perfect_mdz[r][end] = 0;
+		perfect_cigar_bin[r][0] = sequence_len[r] << 4;
 	}
 	
 	check_buffers_occupation();
@@ -1122,13 +1447,17 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 		
 		data_ptr += id_bytes + mapping_counter_size;
 		ASSERT(data_ptr < data_srt_end, "Error 2");
-		
-		uint64_t no_stored_mappings = MIN(no_mappings, max_no_mappings);
+	
+		// !!! Tymczasowo wczytujemy wszystkie mapowania a nie tylko 1024
+//		uint64_t no_stored_mappings = MIN(no_mappings, max_no_mappings);
+		uint64_t no_stored_mappings = no_mappings;
 		uint32_t rec_size = sizeof(ref_pos_t) + 1 + 1;
 
 		int32_t ref_seq_id;
 		string ref_seq_name;
 		int32_t ref_seq_pos;
+
+		bool heap_constructed = false;
 		
 		for(uint64_t i = 0; i < no_stored_mappings; ++i)
 		{
@@ -1149,18 +1478,46 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 			}
 			else
 			{
-				//cout << "Error in position translation!\n";
+				//cerr << "Error in position translation!\n";
 				ref_seq_name = "??";
 				ref_seq_pos = 0;
+			}
+
+			if (mapping_desc[r].size() == max_no_mappings && !heap_constructed)
+			{
+				make_heap(mapping_desc->begin(), mapping_desc->end(), mapping_desc_comparator);
+				heap_constructed = true;
 			}
 
 			mapping_desc[r].push_back(mapping_desc_t(raw_pos, ref_seq_id, ref_seq_pos, (genome_t) dir, sequence_len[r], errors, nullptr));
 			mapping_desc[r].back().ref_length = sequence_len[r]; // this will be corrected later
 			mapping_desc[r].back().score = hitEvaluator(mapping_desc[r].back());
 
+			if (heap_constructed)
+			{
+				push_heap(mapping_desc[r].begin(), mapping_desc[r].end(), mapping_desc_comparator);
+				pop_heap(mapping_desc[r].begin(), mapping_desc[r].end(), mapping_desc_comparator);
+				mapping_desc[r].pop_back();
+			}
+
 			data_ptr += rec_size;
 			ASSERT(data_ptr <= data_srt_end, "Error 3");
 		}
+
+/*		if (mapping_desc->size() > max_no_mappings)
+		{
+			partial_sort(mapping_desc->begin(), mapping_desc->begin() + max_no_mappings, mapping_desc->end(),
+				[](mapping_desc_t &x, mapping_desc_t &y)
+			{
+				if (x.err_edit_distance != y.err_edit_distance)
+					return x.err_edit_distance < y.err_edit_distance;
+
+				// Use hash instead of plain raw_pos to pick mappings from "random" positions instead of prefering first chromosomes
+				return (x.raw_pos * 0x678dde6fu) < (y.raw_pos * 0x678dde6fu);
+			});
+
+			mapping_desc->resize(max_no_mappings);
+		}*/
 	}
 
 	// mask indicating exact matches
@@ -1351,15 +1708,16 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 				insertSizeModel->addSample(template_len);
 			}
 
-		string rnext[] = { "=", "=" };
+//		string rnext[] = { "=", "=" };
+		int rnext[2] = { -2, -2 };
 
 		// set flags
 		uint32_t flag[2] = { first_pair ? 0x3u : 0x103u, first_pair ? 0x3u : 0x103u };	// both paired reads mapped; 0x100 - not the first mapping (more tha one mapping found)
 
 		if (template_len == mapping_pair_t::MAX_INSERT_SIZE) {
 			template_len = 0;
-			rnext[0] = (*ref_seq_desc)[p.second->ref_seq_id].name;
-			rnext[1] = (*ref_seq_desc)[p.first->ref_seq_id].name;
+			rnext[0] = p.second->ref_seq_id;
+			rnext[1] = p.first->ref_seq_id;
 			flag[0] = flag[1] = first_pair ? 0x1 : 0x101; // if mapped to different chromosomes 
 		}
 
@@ -1387,23 +1745,36 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 
 			uchar_t* cigar = perfect_cigar[r];
 			uchar_t* mdz = perfect_mdz[r];
+			uint32_t* cigar_bin = perfect_cigar_bin[r];
+			uint32_t cigar_bin_len = perfect_cigar_bin_len[r];
 
 			if (mapping.method != MatchingMethod::Perfect && mapping.method != MatchingMethod::PerfectDistant) {
-				mp_cigar->Reserve(cigar);
 				mp_mdz->Reserve(mdz);
-				extract_cigar_and_mdz(mapping.ext_cigar, cigar, mdz);
+				if (store_BAM)
+				{
+					mp_cigar_bin->Reserve(cigar_bin);
+					cigar_bin_len = extract_cigarbin_and_mdz(mapping.ext_cigar, cigar_bin, mdz);
+				}
+				else
+				{
+					mp_cigar->Reserve(cigar);
+					extract_cigar_and_mdz(mapping.ext_cigar, cigar, mdz);
+				}
 			}
 
 			if (filterPassed) {
-				store_mapping_result(mapped_part, mapped_part_pos,
-					id[r], id_len[r], flag[r], (*ref_seq_desc)[mapping.ref_seq_id].name, mapping.ref_seq_pos, mapping.mapq, cigar,
-					rnext[r], mate_mapping.ref_seq_pos, insert_size, mapping.dir, sequence[r], sequence_len[r], quality[r],
+				store_mapping_result(
+					id[r], id_len[r], flag[r], mapping.ref_seq_id, mapping.ref_seq_pos, mapping.mapq, cigar, cigar_bin, cigar_bin_len,
+					rnext[r], mate_mapping.ref_seq_pos, insert_size, mapping.dir, mapping.ref_length, sequence[r], sequence_len[r], quality[r],
 					mapping.err_edit_distance, mdz, mapping.score, mapping.method);
 			}
 
 			if (mapping.method != MatchingMethod::Perfect && mapping.method != MatchingMethod::PerfectDistant) {
-				mp_cigar->Free(cigar);
 				mp_mdz->Free(mdz);
+				if(store_BAM)
+					mp_cigar_bin->Free(cigar_bin);
+				else
+					mp_cigar->Free(cigar);
 			}
 		}
 
@@ -1449,22 +1820,22 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 					flag += 0x08;
 					
 					if (filterPassed) {
-						store_mapping_result(mapped_part, mapped_part_pos,
+						store_mapping_result(
 							id[r], id_len[r], flag,
-							"*", 0, 0, nullptr,
-							"*", 0, 0,
-							genome_t::direct, sequence[r], sequence_len[r], quality[r],
+							-1, 0, 0, nullptr, nullptr, 0,
+							-1, 0, 0,
+							genome_t::direct, 1, sequence[r], sequence_len[r], quality[r],
 							0, nullptr, 0, MatchingMethod::Unmatched);
 					}
 				}
 				else  {
 					// if mate is mapped - use RNAME and POS from mate (SAM recommended practices)
 					if (filterPassed) {
-						store_mapping_result(mapped_part, mapped_part_pos,
+						store_mapping_result(
 							id[r], id_len[r], flag,
-							(*ref_seq_desc)[mate_mapping[0]->ref_seq_id].name, mate_mapping[0]->ref_seq_pos, 0, nullptr,
-							(*ref_seq_desc)[mate_mapping[0]->ref_seq_id].name, mate_mapping[0]->ref_seq_pos, 0,
-							genome_t::direct, sequence[r], sequence_len[r], quality[r],
+							mate_mapping[0]->ref_seq_id, mate_mapping[0]->ref_seq_pos, 0, nullptr, nullptr, 0,
+							mate_mapping[0]->ref_seq_id, mate_mapping[0]->ref_seq_pos, 0,
+							genome_t::direct, mate_mapping[0]->ref_length, sequence[r], sequence_len[r], quality[r],
 							0, nullptr, 0, MatchingMethod::Unmatched);
 					}
 				}
@@ -1484,23 +1855,36 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 			
 				uchar_t* cigar = perfect_cigar[r];
 				uchar_t* mdz = perfect_mdz[r];
+				uint32_t* cigar_bin = perfect_cigar_bin[r];
+				uint32_t cigar_bin_len = perfect_cigar_bin_len[r];
 
 				if (mapping.method != MatchingMethod::Perfect && mapping.method != MatchingMethod::PerfectDistant) {
-					mp_cigar->Reserve(cigar);
 					mp_mdz->Reserve(mdz);
-					extract_cigar_and_mdz(mapping.ext_cigar, cigar, mdz);
+					if (store_BAM)
+					{
+						mp_cigar_bin->Reserve(cigar_bin);
+						cigar_bin_len = extract_cigarbin_and_mdz(mapping.ext_cigar, cigar_bin, mdz);
+					}
+					else
+					{
+						mp_cigar->Reserve(cigar);
+						extract_cigar_and_mdz(mapping.ext_cigar, cigar, mdz);
+					}
 				}
 
 				if (filterPassed) {
-					store_mapping_result(mapped_part, mapped_part_pos,
-						id[r], id_len[r], flag, (*ref_seq_desc)[mapping.ref_seq_id].name, mapping.ref_seq_pos, mapping.mapq, cigar,
-						"*", 0, template_len, mapping.dir, sequence[r], sequence_len[r], quality[r],
+					store_mapping_result(
+						id[r], id_len[r], flag, mapping.ref_seq_id, mapping.ref_seq_pos, mapping.mapq, cigar, cigar_bin, cigar_bin_len,
+						-1, 0, template_len, mapping.dir, mapping.ref_length, sequence[r], sequence_len[r], quality[r],
 						mapping.err_edit_distance, mdz, mapping.score, mapping.method);
 				}
 
 				if (mapping.method != MatchingMethod::Perfect && mapping.method != MatchingMethod::PerfectDistant) {
-					mp_cigar->Free(cigar);
 					mp_mdz->Free(mdz);
+					if(store_BAM)
+						mp_cigar_bin->Free(cigar_bin);
+					else
+						mp_cigar->Free(cigar);
 				}
 
 				first = false;
@@ -1536,44 +1920,63 @@ void CSamGenerator::store_unmapped_read(uchar_t *id, uchar_t *sequence, uchar_t 
 
 	check_buffers_occupation();
 
-	// ***************** Obligatory fields
-	// Read id
-	id_len = trim_id(id, id_len);
-	append_part(id+1, id_len-1, mapped_part, mapped_part_pos);
+	if (store_BAM)
+	{
+		bam_part->SetRefId(-1);
+		bam_part->SetRefId(-1);
+		bam_part->SetDirection(genome_t::direct);
+		bam_part->SetMapq(0);
+		bam_part->SetCigar(nullptr, 0);
+		bam_part->SetFlag(4);		// flag
+		bam_part->SetNextRefId(-1);
+		bam_part->SetNextPos(-1);
+		bam_part->SetTlen(0);
+		bam_part->SetReadName(id);
+		bam_part->SetSeq(sequence, sequence_len);
+		bam_part->SetQual(quality);
 
-	// Flags - unmapped read = 4
-	append_part(4, mapped_part, mapped_part_pos);
+		bam_part->CloseLine();
+	}
+	else
+	{
+		// ***************** Obligatory fields
+		// Read id
+		id_len = trim_id(id, id_len);
+		sam_part->AppendPart(id + 1, id_len - 1);
 
-	// Ref. seq. name
-	append_part("*", mapped_part, mapped_part_pos);
+		// Flags - unmapped read = 4
+		sam_part->AppendPart(4);
 
-	// Mapping position
-	append_part(0, mapped_part, mapped_part_pos);
+		// Ref. seq. name
+		sam_part->AppendPart("*");
 
-	// Mapping quality
-	append_part(0, mapped_part, mapped_part_pos);
+		// Mapping position
+		sam_part->AppendPart(0);
 
-	// CIGAR
-	append_part("*", mapped_part, mapped_part_pos);
+		// Mapping quality
+		sam_part->AppendPart(0);
 
-	// Mate ref. seq. name
-	append_part("*", mapped_part, mapped_part_pos);
+		// CIGAR
+		sam_part->AppendPart("*");
 
-	// Mate position
-	append_part(0, mapped_part, mapped_part_pos);
+		// Mate ref. seq. name
+		sam_part->AppendPart("*");
 
-	// Template len
-	append_part(0, mapped_part, mapped_part_pos);
+		// Mate position
+		sam_part->AppendPart(0);
 
-	// Read sequence
-	append_part(sequence, sequence_len, mapped_part, mapped_part_pos);
+		// Template len
+		sam_part->AppendPart(0);
 
-	// Read qualities
-	append_part(quality, quality_len, mapped_part, mapped_part_pos);
+		// Read sequence
+		sam_part->AppendPart(sequence, sequence_len);
 
-	close_line(mapped_part, mapped_part_pos);
+		// Read qualities
+		sam_part->AppendPart(quality, quality_len);
+
+		sam_part->CloseLine();
+	}
 }
-
 // ************************************************************************************
 // Convert sequence to reverse complement
 void CSamGenerator::convert_to_rev_comp(uchar_t *dest, uchar_t *src, uint32_t len)
@@ -1654,13 +2057,30 @@ void CSamGenerator::ref_copy_direct(uchar_t *dest, uchar_t *src, ref_pos_t pos, 
 // ************************************************************************************
 void CSamGenerator::check_buffers_occupation()
 {
-	if(mapped_part_pos + mapped_part_reserve > mapped_part_size)
+	if (store_BAM)
+	{
+		if (bam_part->IsFilled())
+		{
+			push_mapped_part();
+			bam_part->Reserve();
+		}
+	}
+	else
+	{
+		if (sam_part->IsFilled())
+		{
+			push_mapped_part();
+			sam_part->Reserve();
+		}
+	}
+
+/*	if(mapped_part_pos + mapped_part_reserve > mapped_part_size)
 	{
 		push_mapped_part();
 
 		mp_sam_parts->Reserve(mapped_part);
 		mapped_part_pos = 0;
-	}
+	}*/
 }
 
 // EOF

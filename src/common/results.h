@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -27,6 +27,26 @@
 
 using namespace std;
 
+// ************************************************************************************
+class CMappingsHeapGatherer
+{
+	size_t max_size;
+	size_t size;
+
+	vector<uint64_t> v_mappings;
+
+public:
+	CMappingsHeapGatherer(size_t _max_size = 1);
+	void Clear(size_t _max_size);
+	void Push(uint32_t pos, genome_t direction, uint32_t no_errors);
+	bool Empty();
+	uint64_t Pop();
+	uint64_t PopUnsorted();
+
+	uint32_t DecodePos(uint64_t x) const;
+	uint32_t DecodeNoErrors(uint64_t x) const;
+	genome_t DecodeDir(uint64_t x) const;
+};
 
 // ************************************************************************************
 class CMappingResultsCollector
@@ -56,7 +76,7 @@ class CMappingResultsCollector
 
 	uint64_t push_counter;
 	uint64_t push_unique_counter;
-	uint64_t send_bytes;
+	uint64_t sent_bytes;
 	uint64_t added_bytes;
 
 public:
@@ -80,6 +100,7 @@ class CMappingResultsDeliverer
 	CJoinerMgr *joiner_mgr;
 	CMemoryMonitor *mem_monitor;
 	CSerialProcessing *serial_processing;
+	CPtrPool *ptr_pool;
 
 	bool keep_temporary_files;
 

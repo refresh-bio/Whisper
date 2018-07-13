@@ -28,7 +28,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v140</PlatformToolset>
     <CharacterSet>NotSet</CharacterSet>
     <UseOfMfc>Static</UseOfMfc>
   </PropertyGroup>
@@ -42,7 +42,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v140</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>NotSet</CharacterSet>
   </PropertyGroup>
@@ -177,6 +177,7 @@
     <ClInclude Include="..\common\utils.h" />
     <ClInclude Include="..\libs\asmlib.h" />
     <ClInclude Include="..\libs\bzlib.h" />
+    <ClInclude Include="..\libs\libdeflate.h" />
     <ClInclude Include="..\libs\zlib.h" />
     <ClInclude Include="edit_dist.h" />
     <ClInclude Include="LevMyers.h" />
@@ -192,6 +193,7 @@
     <ClInclude Include="bins.h" />
     <ClInclude Include="ref_desc.h" />
     <ClInclude Include="sam.h" />
+    <ClInclude Include="sam_part.h" />
     <ClInclude Include="sam_writer.h" />
     <ClInclude Include="simd_utils.h" />
     <ClInclude Include="soft_clipping.h" />
@@ -210,6 +212,7 @@
     <ClCompile Include="..\common\timer.cpp" />
     <ClCompile Include="..\common\utils.cpp" />
     <ClCompile Include="..\libs\instrset_detect.cpp" />
+    <ClCompile Include="sam_part.cpp" />
     <ClCompile Include="whisper.cpp" />
     <ClCompile Include="edit_dist.cpp" />
     <ClCompile Include="LevMyers128_AVX.cpp">
@@ -267,6 +270,7 @@
   <ItemGroup>
     <Library Include="..\libs\libacof64.lib" />
     <Library Include="..\libs\libbzip2.lib" />
+    <Library Include="..\libs\libdeflate.lib" />
     <Library Include="..\libs\zlibstat.lib" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

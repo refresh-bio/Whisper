@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -35,73 +35,76 @@ bool run_mapper(int argc, char **argv);
 // ************************************************************************************
 void usage()
 {
-	cout << "Whisper v. " << MAPPER_VERSION << "\n";
-	cout << "Usage:\n";
-	cout << "   whisper [options] <index_name> @<files> \n";
-	cout << "   whisper [options] <index_name> file_se \n";
-	cout << "   whisper [options] <index_name> file_pe1 file_pe2\n";
-	cout << "Parameters:\n";
-	cout << "  index_name   - name of the index (as created by asm_pp)\n";
-	cout << "  files        - name of the file containing list of FASTQ files with seq. reads\n";
-	cout << "  file_se      - FASTQ file (single-end)\n";
-	cout << "  file_pe[1|2] - FASTQ files (paired-end)\n";
-	cout << "Options:\n";
-	cout << "  -b <value> - no. of temporary files (minimum: 100, default: " << cmd_params.no_bins << ")\n";
-	cout << "  -d[fr/ff/rf] - mapping orientation (default: " <<
+	cerr << "Whisper v. " << MAPPER_VERSION << "\n";
+	cerr << "Usage:\n";
+	cerr << "   whisper [options] <index_name> @<files> \n";
+	cerr << "   whisper [options] <index_name> file_se \n";
+	cerr << "   whisper [options] <index_name> file_pe1 file_pe2\n";
+	cerr << "Parameters:\n";
+	cerr << "  index_name   - name of the index (as created by asm_pp)\n";
+	cerr << "  files        - name of the file containing list of FASTQ files with seq. reads\n";
+	cerr << "  file_se      - FASTQ file (single-end)\n";
+	cerr << "  file_pe[1|2] - FASTQ files (paired-end)\n";
+	cerr << "Options:\n";
+	cerr << "  -b <value> - no. of temporary files (minimum: 100, default: " << cmd_params.no_bins << ")\n";
+	cerr << "  -d[fr/ff/rf] - mapping orientation (default: " <<
 		(cmd_params.mapping_orientation == mapping_orientation_t::forward_forward ? "-dff" :
 			cmd_params.mapping_orientation == mapping_orientation_t::forward_reverse ? "-dfr (forward - reverse)" : 
 			"-drf") << "\n";
 #ifdef _DEVELOPMENT_MODE
-	cout << "  -dev-mode - turn on developer mode (default: " << cmd_params.developer_mode << ")\n";
+	cerr << "  -dev-mode - turn on developer mode (default: " << cmd_params.developer_mode << ")\n";
 #endif
-	cout << "  -dist_paired <value> - max. distance for paired read (default: " << cmd_params.max_mate_distance << ")\n";
-	cout << "  -e <value> - max. fraction of errors in % (default: " << cmd_params.max_frac_errors << ", max: " << largest_frac_errors << ")\n";
-	cout << "  -e-paired <value> - max. fraction of errors in paired read (default: " << cmd_params.max_mate_edit_distance_frac << ")\n";
-	cout << "  -enable-boundary-clipping <value> - enable clipping at boundaries when a lot of mismatches appears (default: " << cmd_params.enable_boundary_clipping << ")\n";
-	cout << "  -filter <value> - store only mappings for given chromosome (default: " << cmd_params.filter << ")\n";
-	cout << "  -gap-open <value> - score for gap open (default: " << cmd_params.gap_open << ")\n";
-	cout << "  -gap-extend <value> - score for gap extend (default: " << cmd_params.gap_extend << ")\n";
-	cout << "  -gzipped-SAM-level <value> - gzip compression level of SAM, 0 - no compression (default: " << cmd_params.gzipped_SAM_level << ")\n";
-	cout << "  -hit-merging-threshold <value> - minimal distance between different mappings (default: " << cmd_params.hit_merging_threshold << ")\n";
-	cout << "  -high-confidence-sigmas <value> - (default: " << cmd_params.high_confidence_sigmas << ")\n";
-	cout << "  -hit-merging-wrt-first <value> - calculate distance in marged group w.r.t. first (default: " << cmd_params.hit_merging_wrt_first << ")\n";
-	cout << "  -m[f/s/a] - mode: first stratum/second stratum/all strata (default: " <<
-//	cout << "  -m[f|a] - mode: first stratum/all strata (default: " <<
+	cerr << "  -dist_paired <value> - max. distance for paired read (default: " << cmd_params.max_mate_distance << ")\n";
+	cerr << "  -e <value> - max. no of errors (default: " << cmd_params.max_no_errors << ", max: " << 100.0 * largest_frac_errors << "% of read length)\n";
+	cerr << "  -e-paired <value> - max. fraction of errors in paired read (default: " << cmd_params.max_mate_edit_distance_frac << ")\n";
+	cerr << "  -enable-boundary-clipping <value> - enable clipping at boundaries when a lot of mismatches appears (default: " << cmd_params.enable_boundary_clipping << ")\n";
+	cerr << "  -filter <value> - store only mappings for given chromosome (default: " << cmd_params.filter << ")\n";
+	cerr << "  -gap-open <value> - score for gap open (default: " << cmd_params.gap_open << ")\n";
+	cerr << "  -gap-extend <value> - score for gap extend (default: " << cmd_params.gap_extend << ")\n";
+	cerr << "  -gzipped-SAM-level <value> - gzip compression level of SAM/BAM, 0 - no compression (default: " << cmd_params.gzipped_SAM_level << ")\n";
+	cerr << "  -hit-merging-threshold <value> - minimal distance between different mappings (default: " << cmd_params.hit_merging_threshold << ")\n";
+	cerr << "  -high-confidence-sigmas <value> - (default: " << cmd_params.high_confidence_sigmas << ")\n";
+	cerr << "  -hit-merging-wrt-first <value> - calculate distance in marged group w.r.t. first (default: " << cmd_params.hit_merging_wrt_first << ")\n";
+	cerr << "  -m[f/s/a] - mode: first stratum/second stratum/all strata (default: " <<
+//	cerr << "  -m[f|a] - mode: first stratum/all strata (default: " <<
 		(cmd_params.mapping_mode == mapping_mode_t::first ? "first stratum" :
 			cmd_params.mapping_mode == mapping_mode_t::second ? "second stratum" : 
 			"all strata") << ")\n";
-	cout << "  -mask-lqb <value> - mask bases of quality lower than value (default: " << cmd_params.mask_low_quality_bases << ")\n";
-//	cout << "  -o <value> - approximate amount of RAM in GB (default: " << cmd_params.max_total_memory << "; must be at least equal no. threads, but not less than 8)\n";
-	cout << "  -out <name> - name of the output file (default: " << cmd_params.project_name << ")\n";
-	cout << "  -penalty-saturation <value> - no. of sigmas for max. penalty in matching pairs (default: " << cmd_params.penalty_saturation_sigmas << ")\n";
-	cout << "  -r[s|p] - single of paired-end reads (default: " << (cmd_params.paired_reads ? "paired" : "single") << ")\n";
-	cout << "  -score-discretization-threshold (default: " << cmd_params.score_discretization_threshold << ")\n";
-	cout << "  -score-match <value> - score for matching symbol (default: " << cmd_params.match_score << ")\n";
-	cout << "  -score-clipping <value> score for clipping (default: " << cmd_params.clipping_score << ")\n";
-	cout << "  -score-mismatch <value> - score for mismatching symbol (default: " << cmd_params.mismatch_score << ")\n";
-	cout << "  -sens <value> - turn on/off sensitive mode (default: " << (bool) cmd_params.sensitive_mode << ")\n";
-	cout << "  -sens-factor <value> - sensitivity factor (default: " << cmd_params.sensitivity_factor << ")\n";
-	cout << "  -t <value> - no. of threads (0-adjust to hardware) (default: " << cmd_params.no_threads << ")\n";
-	cout << "  -temp <name> - prefix for temporary files (default: " << cmd_params.temp_prefix << ")\n";
-	cout << "  -x - load complete suffix arrays in main memory (default: " << cmd_params.sa_in_ram << ")\n";
+	cerr << "  -mask-lqb <value> - mask bases of quality lower than value (default: " << cmd_params.mask_low_quality_bases << ")\n";
+//	cerr << "  -o <value> - approximate amount of RAM in GB (default: " << cmd_params.max_total_memory << "; must be at least equal no. threads, but not less than 8)\n";
+	cerr << "  -out <name> - name of the output file (default: " << cmd_params.project_name << ")\n";
+	cerr << "  -penalty-saturation <value> - no. of sigmas for max. penalty in matching pairs (default: " << cmd_params.penalty_saturation_sigmas << ")\n";
+	cerr << "  -rg <read_group> - complete read group header line, ’\t’ character will be converted to a TAB in the output SAM while the read group ID will be attached to every read (example line: ’@RG\tID:foo\tSM:bar’)\n";
+	cerr << "  -r[s|p] - single or paired-end reads (default: " << (cmd_params.paired_reads ? "paired" : "single") << ")\n";
+	cerr << "  -score-discretization-threshold (default: " << cmd_params.score_discretization_threshold << ")\n";
+	cerr << "  -score-match <value> - score for matching symbol (default: " << cmd_params.match_score << ")\n";
+	cerr << "  -score-clipping <value> score for clipping (default: " << cmd_params.clipping_score << ")\n";
+	cerr << "  -score-mismatch <value> - score for mismatching symbol (default: " << cmd_params.mismatch_score << ")\n";
+	cerr << "  -sens <value> - turn on/off sensitive mode (default: " << (bool) cmd_params.sensitive_mode << ")\n";
+	cerr << "  -sens-factor <value> - sensitivity factor (default: " << cmd_params.sensitivity_factor << ")\n";
+	cerr << "  -stdout - use stdout to store the output (default: " << cmd_params.use_stdout << ")\n";
+	cerr << "  -store-BAM - turn on saving in BAM (default: " << (bool)cmd_params.store_BAM << ")\n";
+	cerr << "  -t <value> - no. of threads (0-adjust to hardware) (default: " << cmd_params.no_threads << ")\n";
+	cerr << "  -temp <name> - prefix for temporary files (default: " << cmd_params.temp_prefix << ")\n";
+	cerr << "  -x - load complete suffix arrays in main memory (default: " << cmd_params.sa_in_ram << ")\n";
 
 #ifdef _DEVELOPMENT_MODE
-	cout << "Developer-mode options:\n";
-	cout << "  -log-stats - turn on logging statistics (default: " << cmd_params.log_stats << ")\n";
-	cout << "  -keep <value> - keep temporary files (default: " << cmd_params.keep_temporary_files << ")\n";
-	cout << "  -mapq-div <value> - divisor in MAPQ calculation formula (default: " << cmd_params.mapq_div << ")\n";
-	cout << "  -mapq-mult <value> - multiplier in MAPQ calculation formula (default: " << cmd_params.mapq_mult << ")\n";
-	cout << "  -mrl <value> - minimal read length (default: " << cmd_params.min_read_len << ")\n";
-	cout << "  -Mrl <value> - maximal read length (default: " << cmd_params.max_read_len << ")\n";
-	cout << "  -s <major>:<minor> - perform only stage <major>:<minor>\n";
-	cout << "  -s x - perform only postprocessing stage\n";
-	cout << "  -sr <major1>:<minor1>-<major2>:<minor2> - perform only stages from <major1>:<minor1> to <major2>:<minor2>\n";
-	cout << "  -v <value> - verbosity level (default: " << cmd_params.verbosity_level << ")\n";
+	cerr << "Developer-mode options:\n";
+	cerr << "  -log-stats - turn on logging statistics (default: " << cmd_params.log_stats << ")\n";
+	cerr << "  -keep <value> - keep temporary files (default: " << cmd_params.keep_temporary_files << ")\n";
+	cerr << "  -mapq-div <value> - divisor in MAPQ calculation formula (default: " << cmd_params.mapq_div << ")\n";
+	cerr << "  -mapq-mult <value> - multiplier in MAPQ calculation formula (default: " << cmd_params.mapq_mult << ")\n";
+	cerr << "  -mrl <value> - minimal read length (default: " << cmd_params.min_read_len << ")\n";
+	cerr << "  -Mrl <value> - maximal read length (default: " << cmd_params.max_read_len << ")\n";
+	cerr << "  -s <major>:<minor> - perform only stage <major>:<minor>\n";
+	cerr << "  -s x - perform only postprocessing stage\n";
+	cerr << "  -sr <major1>:<minor1>-<major2>:<minor2> - perform only stages from <major1>:<minor1> to <major2>:<minor2>\n";
+	cerr << "  -v <value> - verbosity level (default: " << cmd_params.verbosity_level << ")\n";
 #endif
-	cout << "Examples:\n";
-	cout << "  whisper human @files\n";
-	cout << "  whisper -temp temp/ human reads1.fq reads2.fq\n";
-	cout << "  whisper -out result.sam -temp temp/ -t 12 human reads1.fq reads2.fq\n";
+	cerr << "Examples:\n";
+	cerr << "  whisper human @files\n";
+	cerr << "  whisper -temp temp/ human reads1.fq reads2.fq\n";
+	cerr << "  whisper -out result.sam -temp temp/ -t 12 human reads1.fq reads2.fq\n";
 }
 
 // ************************************************************************************
@@ -153,13 +156,15 @@ bool parse_parameters(int argc, char **argv)
 			cmd_params.developer_mode = true;
 		else if (strcmp(argv[i], "-log-stats") == 0)
 			cmd_params.log_stats = true;
+		else if (strcmp(argv[i], "-stdout") == 0)
+			cmd_params.use_stdout = true;
 		// Gzipped SAM
 		else if (strcmp(argv[i], "-gzipped-SAM") == 0 && i + 1 < argc)
 			cmd_params.gzipped_SAM_level = NormalizeValue(atoi(argv[++i]), 0, 9);
 		else if (strcmp(argv[i], "-filter") == 0 && i + 1 < argc)
 			cmd_params.filter = string(argv[++i]);
 		else if (strcmp(argv[i], "-e") == 0 && i + 1 < argc)
-			cmd_params.max_frac_errors = atof(argv[++i]);
+			cmd_params.max_no_errors = atoi(argv[++i]);
 		else if (strcmp(argv[i], "-e-paired") == 0 && i + 1 < argc)
 			cmd_params.max_mate_edit_distance_frac = atof(argv[++i]);
 		else if (strcmp(argv[i], "-dist-paired") == 0 && i + 1 < argc)
@@ -168,10 +173,14 @@ bool parse_parameters(int argc, char **argv)
 			cmd_params.sensitive_mode = atoi(argv[++i]);
 		else if (strcmp(argv[i], "-sens-factor") == 0 && i + 1 < argc)
 			cmd_params.sensitivity_factor = atof(argv[++i]);
+		else if (strcmp(argv[i], "-store-BAM") == 0)
+			cmd_params.store_BAM = true;
 		else if (strcmp(argv[i], "-out") == 0 && i + 1 < argc)
 			cmd_params.project_name = string(argv[++i]);
 		else if (strcmp(argv[i], "-temp") == 0 && i + 1 < argc)
 			cmd_params.temp_prefix = string(argv[++i]);
+		else if (strcmp(argv[i], "-rg") == 0 && i + 1 < argc) 
+			cmd_params.read_group_line = string(argv[++i]);
 #ifdef _DEVELOPMENT_MODE
 		else if(strcmp(argv[i], "-v") == 0 && i + 1 < argc)
 			cmd_params.verbosity_level = NormalizeValue(atoi(argv[++i]), 1, 4);
@@ -272,7 +281,7 @@ bool parse_parameters(int argc, char **argv)
 		ifstream in(input_file_name.c_str()+1);
 		if(!in.good())
 		{
-			cout << "Error: No " << input_file_name.c_str()+1 << " file\n";
+			cerr << "Error: No " << input_file_name.c_str()+1 << " file\n";
 			return false;
 		}
 
@@ -349,7 +358,7 @@ bool run_mapper(int argc, char **argv)
 
 	timer.StopTimer();
 
-	cout << "Computation time: " << timer.GetElapsedTime() << " s\n";
+	cerr << "Computation time: " << timer.GetElapsedTime() << " s\n";
 
 	if (cmd_params.log_stats)
 	{

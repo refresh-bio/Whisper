@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -656,7 +656,7 @@ void CPrePostBaseFastqReader::load_single_file(file_name_no_t file_name_no)
 
 	mem_pool->Reserve(part);
 	if(verbosity_level >= 3)
-		cout << "FastqReader: " << file_name_no.file_name1 << "  (free blocks: " << mem_pool->GetAvailableParts() << ")\n";
+		cerr << "FastqReader: " << file_name_no.file_name1 << "  (free blocks: " << mem_pool->GetAvailableParts() << ")\n";
 	
 	uint32_t no_reads;
 
@@ -668,7 +668,7 @@ void CPrePostBaseFastqReader::load_single_file(file_name_no_t file_name_no)
 
 		mem_pool->Reserve(part);
 		if(verbosity_level >= 3)
-			cout << "FastqReader: " << file_name_no.file_name1 << "  (free blocks: " << mem_pool->GetAvailableParts() << ")\n";
+			cerr << "FastqReader: " << file_name_no.file_name1 << "  (free blocks: " << mem_pool->GetAvailableParts() << ")\n";
 
 		++part_no;
 	}
@@ -696,7 +696,7 @@ void CPrePostBaseFastqReader::load_pair_files_thr(file_name_no_t file_name_no)
 	uint32_t no_reads1, no_reads2;
 
 	if(verbosity_level >= 3)
-		cout << "FastqReader: " << file_name_no.file_name1 << " : " << file_name_no.file_name2 << "  (free blocks: " << mem_pool->GetAvailableParts() << ")\n";
+		cerr << "FastqReader: " << file_name_no.file_name1 << " : " << file_name_no.file_name2 << "  (free blocks: " << mem_pool->GetAvailableParts() << ")\n";
 
 	while (true)
 	{
@@ -716,7 +716,7 @@ void CPrePostBaseFastqReader::load_pair_files_thr(file_name_no_t file_name_no)
 
 		if ((p1_status ^ p2_status) || (no_reads1 != no_reads2 && no_reads == 0))
 		{
-			cout << "Error: Different number of reads in paired files!\n";
+			cerr << "Error: Different number of reads in paired files!\n";
 			exit(1);
 		}
 
@@ -730,7 +730,7 @@ void CPrePostBaseFastqReader::load_pair_files_thr(file_name_no_t file_name_no)
 		process_pair_blocks(file_name_no, part_no, id1, part1, part_filled1, id2, part2, part_filled2);
 	
 		if (verbosity_level >= 3)
-			cout << "FastqReader: " << file_name_no.file_name1 << " : " << file_name_no.file_name2 << "  (free blocks: " << mem_pool->GetAvailableParts() << ")\n";
+			cerr << "FastqReader: " << file_name_no.file_name1 << " : " << file_name_no.file_name2 << "  (free blocks: " << mem_pool->GetAvailableParts() << ")\n";
 
 		++part_no;
 	}
@@ -754,7 +754,7 @@ void CPrePostBaseFastqReader::load_pair_files(file_name_no_t file_name_no)
 	mem_pool->Reserve(part1, part2);
 
 	if(verbosity_level >= 3)
-		cout << "FastqReader: " << file_name_no.file_name1 << " : " << file_name_no.file_name2 << "  (free blocks: " << mem_pool->GetAvailableParts() << ")\n";
+		cerr << "FastqReader: " << file_name_no.file_name1 << " : " << file_name_no.file_name2 << "  (free blocks: " << mem_pool->GetAvailableParts() << ")\n";
 
 	while(fqr1->GetPartInfo(part1, part_filled1, no_reads1) && fqr2->GetPartInfo(part2, part_filled2, no_reads2))
 	{
@@ -766,7 +766,7 @@ void CPrePostBaseFastqReader::load_pair_files(file_name_no_t file_name_no)
 		mem_pool->Reserve(part1, part2);
 
 		if(verbosity_level >= 3)
-			cout << "FastqReader: " << file_name_no.file_name1 << " : " << file_name_no.file_name2 << "  (free blocks: " << mem_pool->GetAvailableParts() << ")\n";
+			cerr << "FastqReader: " << file_name_no.file_name1 << " : " << file_name_no.file_name2 << "  (free blocks: " << mem_pool->GetAvailableParts() << ")\n";
 
 		++part_no;
 	}
@@ -878,7 +878,7 @@ bool CPostFastqReader::is_new_group(read_id_t prev_id, read_id_t new_id)
 void CPostFastqReader::end_of_thread()
 {
 	if(verbosity_level >= 2)
-		cout << "PostFastqReader end_of_thread\n";
+		cerr << "PostFastqReader end_of_thread\n";
 	q_res_ids->MarkCompleted();
 	joiner_mgr->MarkFastqReaderCompleted();
 }

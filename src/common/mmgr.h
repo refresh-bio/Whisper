@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -18,10 +18,127 @@
 #include <condition_variable>
 #include <mutex>
 #include <iostream>
+#include <algorithm>
 
 //#define DISABLE_MEMORY_MONITOR
 
 using namespace std;
+
+// ************************************************************************************
+// CPtrPool
+// ************************************************************************************
+class CPtrPool
+{
+	typedef struct {
+		uchar_t *ptr;
+		uint64_t size;
+		bool reserved;
+	} pool_item_t;
+	
+	pool_item_t *pool;
+	int pool_size;
+	int no_reserved;
+
+	int64_t alloc_mem;
+
+	mutable mutex mtx;							// The mutex to synchronise on
+	condition_variable cv;						// The condition to wait for
+
+public:
+	CPtrPool(int _pool_size)
+	{
+		alloc_mem = 0;
+
+		pool_size = _pool_size;
+		pool = new pool_item_t[pool_size];
+		no_reserved = 0;
+
+		for (int i = 0; i < pool_size; ++i)
+		{
+			pool[i].size = 1;
+			pool[i].ptr = new uchar_t[pool[i].size];
+			pool[i].reserved = false;
+
+			alloc_mem += 1;
+		}
+	}
+
+	~CPtrPool()
+	{
+		for (int i = 0; i < pool_size; ++i)
+		{
+			delete[] pool[i].ptr;
+
+			alloc_mem -= pool[i].size;
+//			cerr << "Ptr_pool destructor: " + to_string(alloc_mem >> 20) + "MB\n";
+		}
+
+		delete[] pool;
+	}
+
+	uchar_t* Allocate(uint64_t requested_size)
+	{
+		unique_lock<mutex> lck(mtx);
+		cv.wait(lck, [this] {return no_reserved < pool_size; });
+
+		// Try to find matching block
+		for (int i = 0; i < pool_size; ++i)
+			if (!pool[i].reserved && pool[i].size >= requested_size)
+			{
+				pool[i].reserved = true;
+				++no_reserved;
+				return pool[i].ptr;
+			}
+
+		for (int i = pool_size - 1; i >= 0; --i)
+			if (!pool[i].reserved)
+			{
+				delete[] pool[i].ptr;
+
+				alloc_mem -= pool[i].size;
+//				cerr << "Ptr_pool alloc- : " + to_string(alloc_mem >> 20) + "MB\n";
+
+				// 10% overhead to avoid too many reallocations
+				pool[i].size = (uint64_t)(requested_size * 1.1);
+
+				pool[i].ptr = new uchar_t[pool[i].size];
+				pool[i].reserved = true;
+				++no_reserved;
+				alloc_mem += pool[i].size;
+//				cerr << "Ptr_pool alloc+ : " + to_string(alloc_mem >> 20) + "MB\n";
+
+				auto p = pool[i].ptr;
+
+				sort(pool, pool + pool_size, [](pool_item_t &x, pool_item_t &y) {return x.size < y.size; });
+
+				return p;
+			}
+
+//		cerr << "Cannot allocate in ptr pool: " + to_string(no_reserved) + " : " + to_string(pool_size) + "\n";
+//		exit(1);
+
+		return nullptr;
+	}
+
+	void Release(uchar_t *p)
+	{
+		lock_guard<mutex> lck(mtx);
+		
+		for (int i = 0; i < pool_size; ++i)
+			if (pool[i].ptr == p)
+			{
+				pool[i].reserved = false;
+
+				if (no_reserved-- == pool_size)
+					cv.notify_one();
+				return;
+			}
+	
+//		cerr << "Cannot find pointer\n";
+//		exit(1);
+	}
+};
+
 
 // ************************************************************************************
 // CMemoryPool
@@ -112,7 +229,7 @@ public:
 		unique_lock<mutex> lck(mtx);
 		cv.wait(lck, [this]{return n_parts_free > 0;});
 			
-		part = buffer + stack[--n_parts_free]*part_size;
+		part = reinterpret_cast<T*>(buffer + stack[--n_parts_free]*part_size);
 	}
 
 	// ************************************************************************************
@@ -121,8 +238,8 @@ public:
 		unique_lock<mutex> lck(mtx);
 		cv.wait(lck, [this]{return n_parts_free > 1;});
 			
-		part1 = buffer + stack[--n_parts_free]*part_size;
-		part2 = buffer + stack[--n_parts_free]*part_size;
+		part1 = reinterpret_cast<T*>(buffer + stack[--n_parts_free]*part_size);
+		part2 = reinterpret_cast<T*>(buffer + stack[--n_parts_free]*part_size);
 	}
 
 	// ************************************************************************************
@@ -171,7 +288,7 @@ class CMemoryMonitor
 
 	void show_status(int64_t n)
 	{
-		cout << "Memory monitor: " << max_memory << "  " << memory_in_use << "  : " << n << "\n";
+		cerr << "Memory monitor: " << max_memory << "  " << memory_in_use << "  : " << n << "\n";
 	}
 
 public:

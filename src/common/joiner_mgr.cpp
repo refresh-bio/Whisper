@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -114,7 +114,7 @@ void CJoinerMgr::MarkFastqReaderCompleted()
 void CJoinerMgr::send_bin_for_processing(uint32_t bin_id)
 {
 	if(verbosity_level >= 3)
-		cout << "JoinerMgr: sending result group for converting into SAM: " << bin_id << " size of data: " << data.size() << "\n";
+		cerr << "JoinerMgr: sending result group for converting into SAM: " << bin_id << " size of data: " << data.size() << "\n";
 
 	q_map_reads->Push(data[bin_id]);
 
@@ -129,7 +129,7 @@ void CJoinerMgr::send_bin_for_processing(uint32_t bin_id)
 void CJoinerMgr::complete()
 {
 	if(verbosity_level >= 3)
-		cout << "JoinerMgr: mapping results reading finished\n";
+		cerr << "JoinerMgr: mapping results reading finished\n";
 
 	q_map_reads->MarkCompleted();
 }

@@ -24,17 +24,14 @@
     <ClInclude Include="suf_arr_core.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\asm_common\utils.h">
+    <ClInclude Include="..\common\defs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\asm_common\defs.h">
+    <ClInclude Include="..\common\utils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="asm_pp.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="ref_seq.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -44,10 +41,13 @@
     <ClCompile Include="suf_arr_core.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\asm_common\utils.cpp">
+    <ClCompile Include="..\common\timer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\asm_common\timer.cpp">
+    <ClCompile Include="..\common\utils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="whisper-index.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

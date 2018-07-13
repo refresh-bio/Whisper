@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-11-30
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -91,14 +91,14 @@ bool CRefSeqDesc::Translate(uint32_t raw_pos, string &seq_name, int32_t &pos, in
 			seq_name = "";
 			pos	= 0;
 	
-			cout << "Cannot find raw_pos: " << raw_pos << ", info: " << msg << endl;
+			cerr << "Cannot find raw_pos: " << raw_pos << ", info: " << msg << endl;
 			return false;
 		}
 	}
 
 	if(p == seq_desc.begin())
 	{
-		cout << "Error in Translate! raw_pos1: " << raw_pos1 << ", info:" << msg << endl;
+		cerr << "Error in Translate! raw_pos1: " << raw_pos1 << ", info:" << msg << endl;
 		return false;
 	}
 	--p;

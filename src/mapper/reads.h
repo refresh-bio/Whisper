@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-11-30
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -206,6 +206,7 @@ public:
 	bool SetBlock(uchar_t *_block, uint64_t _block_size);
 	bool Pop(uchar_t* &_id, uchar_t* &_sequence, uchar_t* &_plus, uchar_t* &_quality,
 		uint32_t &id_len, uint32_t &sequence_len, uint32_t &plus_len, uint32_t &quality_len);
+	void Restart();
 };
 
 #endif

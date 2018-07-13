@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -55,7 +55,7 @@ ostream& operator<<(ostream &out, const CParams &p)
 	out << "max_bin_part_size             : " << p.max_bin_part_size << endl;
 	out << "max_cigar_len                 : " << p.max_cigar_len << endl;
 	out << "max_fastq_rec_length          : " << p.max_fastq_rec_length << endl;
-	out << "max_frac_errors               : " << p.max_frac_errors << endl;
+	out << "max_no_errors                 : " << p.max_no_errors << endl;
 	out << "max_group_part_size           : " << p.max_group_part_size << endl;
 	out << "max_mapping_memory            : " << p.max_mapping_memory << endl;
 	out << "max_mate_distance             : " << p.max_mate_distance << endl;
@@ -85,6 +85,7 @@ ostream& operator<<(ostream &out, const CParams &p)
 	out << "project_name                  : " << p.project_name << endl;
 	out << "read_len                      : " << p.read_len << endl;
 	out << "res_group_size                : " << p.res_group_size << endl;
+	out << "read_group_line               : " << p.read_group_line << endl;
 	out << "sa_in_ram                     : " << p.sa_in_ram << endl;
 	out << "sa_prefix_overhead            : " << p.sa_prefix_overhead << endl;
 	out << "sam_buffer_memory             : " << p.sam_buffer_memory << endl;

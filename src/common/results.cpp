@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -16,7 +16,97 @@
 #include "../libs/asmlib.h"
 #include "../common/timer.h"
 #include "../common/defs.h"
+
+
+// ************************************************************************************
+// CMappingsHeapGatherer
+// ************************************************************************************
+
+// ************************************************************************************
+CMappingsHeapGatherer::CMappingsHeapGatherer(size_t _max_size)
+{
+	Clear(_max_size);
+}
+
+// ************************************************************************************
+void CMappingsHeapGatherer::Clear(size_t _max_size)
+{
+	max_size = _max_size;
+	v_mappings.resize(max_size);
+	size = 0;
+}
+
+// ************************************************************************************
+void CMappingsHeapGatherer::Push(uint32_t pos, genome_t direction, uint32_t no_errors)
+{
+	uint64_t x;
+
+	x = ((uint64_t)no_errors) << 40;
+	x += ((uint64_t)pos) << 8;
+	x += (uint64_t) direction;
 	
+	if (size < max_size)
+	{
+		v_mappings[size++] = x;
+		push_heap(v_mappings.begin(), v_mappings.begin() + size);
+	}
+	else
+	{
+		if (x < v_mappings.front())
+		{
+			pop_heap(v_mappings.begin(), v_mappings.end());
+			v_mappings.back() = x;
+			push_heap(v_mappings.begin(), v_mappings.end());
+		}
+	}
+}
+
+// ************************************************************************************
+bool CMappingsHeapGatherer::Empty()
+{
+	return size == 0;
+}
+
+// ************************************************************************************
+uint64_t CMappingsHeapGatherer::Pop()
+{
+	uint64_t r = 0;
+		
+	if (size)
+	{
+		r = v_mappings.front();
+		pop_heap(v_mappings.begin(), v_mappings.begin() + size);
+		--size;
+	}
+
+	return r;
+}
+
+// ************************************************************************************
+uint64_t CMappingsHeapGatherer::PopUnsorted()
+{
+	return v_mappings[--size];
+}
+
+// ************************************************************************************
+uint32_t CMappingsHeapGatherer::DecodePos(uint64_t x) const
+{
+	return (uint32_t)((x >> 8) & 0xffffffffull);
+}
+
+// ************************************************************************************
+uint32_t CMappingsHeapGatherer::DecodeNoErrors(uint64_t x) const
+{
+	return (uint32_t)(x >> 40);
+}
+
+// ************************************************************************************
+genome_t CMappingsHeapGatherer::DecodeDir(uint64_t x) const
+{
+	return (genome_t)(x & 0xffull);
+}
+
+
 // ************************************************************************************
 // CMappingResultsCollector
 // ************************************************************************************
@@ -56,7 +146,7 @@ CMappingResultsCollector::CMappingResultsCollector(CParams *params, CObjects *ob
 
 	push_counter = 0;
 	push_unique_counter = 0;
-	send_bytes = 0;
+	sent_bytes = 0;
 	added_bytes = 0;
 }
 
@@ -69,7 +159,7 @@ CMappingResultsCollector::~CMappingResultsCollector()
 		{
 			if(buffer_sizes[i])
 			{
-				cout << "!!! buffer_sizes: " << buffer_sizes[i] << "\n";
+				cerr << "!!! buffer_sizes: " << buffer_sizes[i] << "\n";
 			}
 			if(buffers[i])
 				mp_map_res->Free(buffers[i]);
@@ -96,7 +186,7 @@ void CMappingResultsCollector::Push(read_id_t id, ref_pos_t pos, genome_t direct
 
 	if(group_id >= no_res_groups)
 	{
-		cout << "Error: " << group_id << "  " << no_res_groups << "\n";
+		cerr << "Error: " << group_id << "  " << no_res_groups << "\n";
 		exit(1);
 	}
 
@@ -106,7 +196,7 @@ void CMappingResultsCollector::Push(read_id_t id, ref_pos_t pos, genome_t direct
 	if(buffer_sizes[group_id] + buffer_reserve >= res_group_size)
 	{
 		q_map_res->Push(res_group_t(group_id, buffers[group_id], buffer_sizes[group_id]));
-send_bytes += buffer_sizes[group_id];
+		sent_bytes += buffer_sizes[group_id];
 		mp_map_res->Reserve(buffers[group_id]);
 		buffer_sizes[group_id] = 0;
 		
@@ -119,11 +209,11 @@ send_bytes += buffer_sizes[group_id];
 	{
 		StoreUInt(buffers[group_id]+buffer_sizes[group_id], id, id_bytes);			// id
 		buffer_sizes[group_id] += id_bytes;
-added_bytes += id_bytes;
+		added_bytes += id_bytes;
 //		buffers[group_id][buffer_sizes[group_id]++] = 0;							// counter
 		StoreUInt(buffers[group_id]+buffer_sizes[group_id], 0, mapping_counter_size);
 		buffer_sizes[group_id] += mapping_counter_size;
-added_bytes += mapping_counter_size;
+		added_bytes += mapping_counter_size;
 		prev_read_id    = id;
 		cur_read_count  = 0;
 		true_read_count = 0;
@@ -133,7 +223,8 @@ added_bytes += mapping_counter_size;
 
 	uint32_t rec_size = sizeof(ref_pos_t) + 1 + 1;
 
-	if(true_read_count >= max_no_mappings)		// do not store explicitly the mappings for reads that maps in too many places
+	// !!! Tymczasowo ignorujemy max_no_mappings
+/*	if(true_read_count >= max_no_mappings)		// do not store explicitly the mappings for reads that maps in too many places
 	{
 		if(true_read_count < max_counter_value)
 			IncrementUInt(buffers[group_id]+(buffer_sizes[group_id] - mapping_counter_size - max_no_mappings*rec_size), mapping_counter_size);
@@ -142,6 +233,7 @@ added_bytes += mapping_counter_size;
 
 		return;
 	}
+	*/
 
 //	++buffers[group_id][buffer_sizes[group_id]-1 - cur_read_count*rec_size];		// increment counter
 	IncrementUInt(buffers[group_id]+(buffer_sizes[group_id] - mapping_counter_size - cur_read_count*rec_size), mapping_counter_size);
@@ -163,7 +255,7 @@ void CMappingResultsCollector::Complete()
 		if(buffer_sizes[i])
 		{
 			q_map_res->Push(res_group_t(i, buffers[i], buffer_sizes[i]));
-send_bytes += buffer_sizes[i];
+			sent_bytes += buffer_sizes[i];
 			mp_map_res->Reserve(buffers[i]);
 		}
 		buffer_sizes[i] = 0;
@@ -171,7 +263,7 @@ send_bytes += buffer_sizes[i];
 
 	running_stats->AddValues(STAT_PUSH_RESULTS    , (int64_t) push_counter);
 	running_stats->AddValues(STAT_PUSH_RESULTS_UNQ, (int64_t) push_unique_counter);
-	running_stats->AddValues(STAT_PUSH_RESULTS_SEND_BYTES, (int64_t) send_bytes);
+	running_stats->AddValues(STAT_PUSH_RESULTS_SEND_BYTES, (int64_t) sent_bytes);
 	running_stats->AddValues(STAT_PUSH_RESULTS_ADDED_BYTES, (int64_t) added_bytes);
 }
 
@@ -196,6 +288,8 @@ CMappingResultsDeliverer::CMappingResultsDeliverer(CParams *params, CObjects *ob
 	running_stats       = objects->running_stats;
 
 	verbosity_level     = params->verbosity_level;
+
+	ptr_pool = objects->ptr_pool;
 }
 
 // ************************************************************************************
@@ -222,10 +316,11 @@ void CMappingResultsDeliverer::operator()()
 			uint64_t file_size = res_group_file->GetSize();
 
 			if(verbosity_level >= 2)
-				cout << "Reading res. group: " << res_id << " of size " << file_size << "\n";
+				cerr << "Reading res. group: " << res_id << " of size " << file_size << "\n";
 
 			mem_monitor->ForceIncrease(file_size*2);
-			uchar_t* data = new uchar_t[file_size];
+
+			uchar_t* data = ptr_pool->Allocate(file_size);
 			serial_processing->Call([&]{res_group_file->Read(data, file_size); });
 	
 			res_group_file->Close();
@@ -237,7 +332,7 @@ void CMappingResultsDeliverer::operator()()
 	}
 
 	if(verbosity_level >= 2)
-		cout << "MappingResultsDeliverer: Mark completed\n";
+		cerr << "MappingResultsDeliverer: Mark completed\n";
 	joiner_mgr->MarkBinsCompleted();
 
 	thr_watch.StopTimer();

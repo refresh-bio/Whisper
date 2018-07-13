@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -466,9 +466,8 @@ void CSoftClipping::clipIllegalPositions(mapping_desc_t& mapping, const scoring_
 // ************************************************************************************
 void CSoftClipping::clipLowQualityPositions(mapping_desc_t& mapping, const uchar_t* quality) {
 	
-	if (mapping.err_edit_distance == 0) {
+	if (mapping.err_edit_distance == 0)
 		return;
-	}
 
 	uint32_t max_clipping = mapping.read_length - 20;
 
@@ -562,9 +561,8 @@ void CSoftClipping::clipLowQualityPositions(mapping_desc_t& mapping, const uchar
 // ************************************************************************************
 void  CSoftClipping::clipBoundaryPositions(mapping_desc_t& mapping, const scoring_t& scoring) 
 {		
-	if (mapping.err_edit_distance == 0) {
+	if (mapping.err_edit_distance == 0)
 		return;
-	}
 	
 	std::pair<int, double> mini{ -1, std::numeric_limits<double>::max() };
 	std::pair<int, double> maxi{ -1, -std::numeric_limits<double>::max() };

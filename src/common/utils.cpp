@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -156,6 +156,15 @@ bool CMapperFile::OpenWrite(string _name)
 }
 	
 // ************************************************************************************
+bool CMapperFile::OpenStream(FILE *stream)
+{
+	file = stream;
+	state = open_mode_t::direct_stream;
+
+	return true;
+}
+
+// ************************************************************************************
 bool CMapperFile::Close()
 {
 	if(state == open_mode_t::opened_for_read)
@@ -236,7 +245,7 @@ int64_t CMapperFile::ReadString(string &data)
 // ************************************************************************************
 int64_t CMapperFile::Write(void* data, int64_t count)
 {
-	if(state != open_mode_t::opened_for_write)
+	if(state != open_mode_t::opened_for_write && state != open_mode_t::direct_stream)
 		return -1;
 
 	return fwrite(data, element_size, count, file);
@@ -245,7 +254,7 @@ int64_t CMapperFile::Write(void* data, int64_t count)
 // ************************************************************************************
 int64_t CMapperFile::Write(const void* data, int64_t count)
 {
-	if(state != open_mode_t::opened_for_write)
+	if(state != open_mode_t::opened_for_write && state != open_mode_t::direct_stream)
 		return -1;
 
 	return fwrite(data, element_size, count, file);
@@ -254,7 +263,7 @@ int64_t CMapperFile::Write(const void* data, int64_t count)
 // ************************************************************************************
 int64_t CMapperFile::WriteByte(uint32_t data)
 {
-	if (state != open_mode_t::opened_for_write)
+	if (state != open_mode_t::opened_for_write && state != open_mode_t::direct_stream)
 		return -1;
 
 	putc(data, file);
@@ -265,7 +274,7 @@ int64_t CMapperFile::WriteByte(uint32_t data)
 // ************************************************************************************
 int64_t CMapperFile::WriteUint32(uint32_t data)
 {
-	if (state != open_mode_t::opened_for_write)
+	if (state != open_mode_t::opened_for_write && state != open_mode_t::direct_stream)
 		return -1;
 
 	for (int i = 0; i < 4; ++i)
@@ -309,7 +318,7 @@ bool CMapperFile::Eof()
 // ************************************************************************************
 void CMapperFile::SetBufSize(uint64_t size)
 {
-	if(state != open_mode_t::closed)
+	if(state != open_mode_t::closed && state != open_mode_t::direct_stream)
 		setvbuf(file, nullptr, _IOFBF, size);
 }
 
@@ -349,6 +358,16 @@ uint64_t CNumericConversions::powers10[];
 
 
 // ************************************************************************************
+void StoreUIntLSB(vector<uchar_t> &dest, uint64_t data, uint32_t no_bytes)
+{
+	for (uint32_t i = 0; i < no_bytes; ++i)
+	{
+		dest.push_back(data & 0xff);
+		data >>= 8;
+	}
+}
+
+// ************************************************************************************
 void StoreUInt(uchar_t *dest, uint64_t data, uint32_t no_bytes)
 {
 	switch(no_bytes)
@@ -374,6 +393,16 @@ void StoreUInt(uchar_t *dest, uint64_t data, uint32_t no_bytes)
 
 // ************************************************************************************
 void StoreUIntLSB(uchar_t *dest, uint64_t data, uint32_t no_bytes)
+{
+	for (uint32_t i = 0; i < no_bytes; ++i)
+	{
+		*dest++ = data & 0xff;
+		data >>= 8;
+	}
+}
+
+// ************************************************************************************
+void StoreInt32LSB(uchar_t *dest, int32_t data, uint32_t no_bytes)
 {
 	for (uint32_t i = 0; i < no_bytes; ++i)
 	{
@@ -692,8 +721,8 @@ void CProgress::show_progress(void)
 
 	if (text != prev_text)
 	{
-		cout << text;
-		fflush(stdout);
+		cerr << text;
+		fflush(stderr);
 		prev_text = text;
 	}
 }

@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -187,6 +187,7 @@ class CMappingCore
 	vector<pair<uint32_t, uint32_t>> rc_match_positions;
 
 	//	vector<tuple<read_id_t, uint32_t, genome_t, uint32_t>> collected_mappings;
+	CMappingsHeapGatherer collected_mappings;
 
 	uint32_t* cur_substr_values_from_pattern;
 	vector<uint32_t> sum_of_localizations_dir, sum_of_localizations_rc;

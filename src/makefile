@@ -56,6 +56,7 @@ whisper: $(MAPPER_MAIN_DIR)/whisper.o \
 	$(MAPPER_COMMON_DIR)/results.o \
 	$(MAPPER_COMMON_DIR)/sa.o \
 	$(MAPPER_MAIN_DIR)/sam.o \
+	$(MAPPER_MAIN_DIR)/sam_part.o \
 	$(MAPPER_MAIN_DIR)/sam_matching.o \
 	$(MAPPER_MAIN_DIR)/sam_writer.o \
 	$(MAPPER_MAIN_DIR)/simd_utils.o \
@@ -95,6 +96,7 @@ whisper: $(MAPPER_MAIN_DIR)/whisper.o \
 	$(MAPPER_COMMON_DIR)/results.o \
 	$(MAPPER_COMMON_DIR)/sa.o \
 	$(MAPPER_MAIN_DIR)/sam.o \
+	$(MAPPER_MAIN_DIR)/sam_part.o \
 	$(MAPPER_MAIN_DIR)/sam_matching.o \
 	$(MAPPER_MAIN_DIR)/sam_writer.o \
 	$(MAPPER_MAIN_DIR)/simd_utils.o \
@@ -110,6 +112,7 @@ whisper: $(MAPPER_MAIN_DIR)/whisper.o \
 	$(MAPPER_LIBS_DIR)/libz.a \
 	$(MAPPER_LIBS_DIR)/libbz2.a \
 	$(MAPPER_LIBS_DIR)/libaelf64.a \
+	$(MAPPER_LIBS_DIR)/libdeflate.a \
 	$(MAPPER_LIBS_DIR)/instrset_detect.o
 
 whisper-index: $(MAPPER_PP_DIR)/whisper-index.o \

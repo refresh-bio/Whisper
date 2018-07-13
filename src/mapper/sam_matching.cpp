@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -105,7 +105,7 @@ bool CSamGenerator::find_duplicate_pairs(const std::vector<mapping_pair_t>& mapp
 			}
 
 			if (abs(b->second->ref_seq_pos - a->second->ref_seq_pos) == 0) {
-				cout << "Duplicate " << cnt++ << endl;
+				cerr << "Duplicate " << cnt++ << endl;
 				//return true;
 			}
 		}
@@ -117,8 +117,8 @@ bool CSamGenerator::find_duplicate_pairs(const std::vector<mapping_pair_t>& mapp
 // ************************************************************************************
 template <>
 bool CSamGenerator::find_pairs<MatchingMethod::FromMapping>(
-	std::vector<mapping_desc_t> mapping_desc[],
-	std::vector<mapping_desc_t*> hits[],
+	std::vector<mapping_desc_t> mapping_desc[2],
+	std::vector<mapping_desc_t*> hits[2],
 	uchar_t *id[2],
 	uchar_t *sequence[2],
 	uint32_t sequence_len[2],
@@ -206,8 +206,8 @@ bool CSamGenerator::find_pairs<MatchingMethod::FromMapping>(
 // ************************************************************************************
 template <>
 bool CSamGenerator::find_pairs<MatchingMethod::FromMappingDistant>(
-	std::vector<mapping_desc_t> mapping_desc[], 
-	std::vector<mapping_desc_t*> hits[],
+	std::vector<mapping_desc_t> mapping_desc[2], 
+	std::vector<mapping_desc_t*> hits[2],
 	uchar_t *id[2], 
 	uchar_t *sequence[2], 
 	uint32_t sequence_len[2], 
@@ -285,8 +285,8 @@ bool CSamGenerator::find_pairs<MatchingMethod::FromMappingDistant>(
 // ************************************************************************************
 template <>
 bool CSamGenerator::find_pairs<MatchingMethod::LevMyers>(
-	std::vector<mapping_desc_t> mapping_desc[],
-	std::vector<mapping_desc_t*> hits[],
+	std::vector<mapping_desc_t> mapping_desc[2],
+	std::vector<mapping_desc_t*> hits[2],
 	uchar_t *id[2],
 	uchar_t *sequence[2],
 	uint32_t sequence_len[2],
@@ -384,7 +384,7 @@ bool CSamGenerator::find_pairs<MatchingMethod::LevMyers>(
 				else {
 					convert_to_rev_comp(tmp_read_sequence + 1, sequence[!r], sequence_len[!r]);
 				}
-				ref_copy_direct(tmp_ref_sequence, reference->GetData(), start_pos, distanceThreshold);
+				ref_copy_direct(tmp_ref_sequence, reference->GetData(), start_pos, distanceThreshold + 2 * max_mate_edit_distance);
 
 				uchar_t* ext_cigar;
 				double affine_score;
@@ -450,8 +450,8 @@ bool CSamGenerator::find_pairs<MatchingMethod::LevMyers>(
 				}
 				else
 				{
-					cout << "Myers: start_pos: " << start_pos << "   relative_end_pos: " << relative_end_pos << "   relative_begin_pos: " << relative_begin_pos << endl;
-					cout << ext_cigar << endl;
+					cerr << "Myers: start_pos: " << start_pos << "   relative_end_pos: " << relative_end_pos << "   relative_begin_pos: " << relative_begin_pos << endl;
+					cerr << ext_cigar << endl;
 					mp_ext_cigar->Free(ext_cigar);
 				}
 			}
@@ -484,8 +484,8 @@ bool CSamGenerator::find_pairs<MatchingMethod::LevMyers>(
 // ************************************************************************************
 template <>
 bool CSamGenerator::find_pairs<MatchingMethod::Clipping>(
-	std::vector<mapping_desc_t> mapping_desc[],
-	std::vector<mapping_desc_t*> hits[],
+	std::vector<mapping_desc_t> mapping_desc[2],
+	std::vector<mapping_desc_t*> hits[2],
 	uchar_t *id[2],
 	uchar_t *sequence[2],
 	uint32_t sequence_len[2],
@@ -702,7 +702,7 @@ void CSamGenerator::fill_cigar_with_lev(mapping_desc_t& mapping, uchar_t *id, uc
 	}
 	else {
 		++stat_mapped_pe_errors;
-		cout << "##" << id << "(" << mapping.err_edit_distance << " vs " << edit_distance << ")" << endl;
+		cerr << "##" << id << "(" << mapping.err_edit_distance << " vs " << edit_distance << ")" << endl;
 	}
 }
 

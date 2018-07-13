@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.0
-// Date    : 2017-12-24
+// Version : 1.1
+// Date    : 2018-07-10
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -222,8 +222,8 @@ bool LevMyers64::dynamicProgramming(ref_pos_t ref_pos, uint32_t max_distance_in_
 
 		if (curr_bp_M - bp_raw_M >= alloc_text_M)
 		{
-			cout << "To far in bp_M!\n";
-			cout << curr_bp_M - bp_raw_M << "   " << alloc_text_M << "\n";
+			cerr << "To far in bp_M!\n";
+			cerr << curr_bp_M - bp_raw_M << "   " << alloc_text_M << "\n";
 			exit(1);
 		}
 
@@ -266,8 +266,8 @@ bool LevMyers64::dynamicProgramming(ref_pos_t ref_pos, uint32_t max_distance_in_
 
 			if (curr_bp_M - bp_raw_M >= alloc_text_M)
 			{
-				cout << "To far in bp_M!\n";
-				cout << curr_bp_M - bp_raw_M << "   " << alloc_text_M << "\n";
+				cerr << "To far in bp_M!\n";
+				cerr << curr_bp_M - bp_raw_M << "   " << alloc_text_M << "\n";
 				exit(1);
 			}
 
