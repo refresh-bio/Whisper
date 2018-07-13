@@ -81,6 +81,7 @@ Options:
  * `-mask-lqb <value>` - mask bases of quality lower than value (default: 0)
  * `-out <name>` - name of the output file (default: whisper)
  * `-penalty-saturation <value>` - no. of sigmas for max. penalty in matching pairs (default: 7)
+ * `-rg <value>` - complete read group header line, (example: '@RG\\tID:foo\\tSM:bar'), '\t' character will be converted to a TAB in the output SAM/BAM, while the read group ID will be attached to every read
  * `-r[s|p]` - single of paired-end reads (default: single)
  * `-score-discretization-threshold <value>` - (default: 0.5)
  * `-score-match <value>` - score for matching symbol (default: 1)
@@ -88,6 +89,8 @@ Options:
  * `-score-mismatch <value>` - score for mismatching symbol (default: -5)
  * `-sens <value>` - turn on/off sensitive mode (default: 1)
  * `-sens-factor <value>` - sensitivity factor (default: 3)
+ * `-stdout` - use stdout to store the output
+ * `-store-BAM` - turn on saving in BAM
  * `-t <value>` - no. of threads (0-adjust to hardware) (default: 0)
  * `-temp <name>` - prefix for temporary files (default: ./whisper_temp_)
  * `-x <value>` - load complete suffix arrays in main memory (default: 0)`
