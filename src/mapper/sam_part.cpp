@@ -281,7 +281,7 @@ void CBamPart::SetReadName(uchar_t *_read_name)
 {
 	read_name = _read_name;
 
-	for (read_name_len = 0; read_name[read_name_len]; ++read_name_len)
+	for (read_name_len = 0; read_name[read_name_len] && read_name[read_name_len] != ' ' && read_name[read_name_len] != '\t'; ++read_name_len)
 		;
 }
 
