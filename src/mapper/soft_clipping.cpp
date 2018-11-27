@@ -389,7 +389,7 @@ void CSoftClipping::getExtCigar(
 			// deletion wrt reference - write corresponding reference symbols
 			for (int i = 0; i < del_size; ++i, ++pos) {
 				ext_cigar[cigar_pos++] = '^';
-				ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos - 1]];
+				ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos]];
 			}
 		}
 		else {
@@ -398,7 +398,7 @@ void CSoftClipping::getExtCigar(
 
 			for (int i = 0; i < -del_size; ++i, ++read_pos) {
 				ext_cigar[cigar_pos++] = '#';
-				ext_cigar[cigar_pos++] = decode[tmp_read_sequence[read_pos]];
+				ext_cigar[cigar_pos++] = decode[tmp_read_sequence[read_pos + 1]];
 			}
 		}
 

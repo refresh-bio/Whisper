@@ -145,7 +145,7 @@ bool LevMyers128<instruction_set_t::avx>::dynamicProgramming(
 				min_ed_pos = j - (seq_len / 64); 
 			}
 			else if (curr_ed == min_ed)
-				if (min_ed_pos + 1 == j - (seq_len / 64))
+				if (min_ed_pos + 1 == j - (seq_len / 64)) // prefer SNP over INDEL
 					min_ed_pos = j - (seq_len / 64); 
 		}
 		else
@@ -293,11 +293,11 @@ void LevMyers128<instruction_set_t::avx>::save(const std::string& filename)
 		file << std::dec << i << "," << code2symbol[genome_prefetch[i]];
 
 
-		file << endl << "D0: " << printVec2uq(bp128_M[i][0].D0)
-			<< endl << "HN: " << printVec2uq(bp128_M[i][0].HN)
-			<< endl << "HP: " << printVec2uq(bp128_M[i][0].HP)
-			<< endl << "VN: " << printVec2uq(bp128_M[i][0].VN)
-			<< endl << "VP: " << printVec2uq(bp128_M[i][0].VP)
+		file << endl << "D0: " << printVec2uq(bp128_M[i][0].D0) << ","
+			<< endl << "HN: " << printVec2uq(bp128_M[i][0].HN) << ","
+			<< endl << "HP: " << printVec2uq(bp128_M[i][0].HP) << ","
+			<< endl << "VN: " << printVec2uq(bp128_M[i][0].VN) << ","
+			<< endl << "VP: " << printVec2uq(bp128_M[i][0].VP) << ","
 		/*	<< endl 
 			<< endl << "X0: " << printVec2uq(bp128_M[i][0].X0)
 			<< endl << "X1: " << printVec2uq(bp128_M[i][0].X1)
@@ -480,8 +480,7 @@ bool LevMyers128Native<instruction_set_t::avx>::dynamicProgramming(
 
 	edit_distance = min_ed;
 
-	if (edit_distance > max_mate_edit_distance) 
-	{
+	if (edit_distance > max_mate_edit_distance) {
 		pos = 0;
 		return false;
 	}
@@ -504,10 +503,10 @@ ref_pos_t LevMyers128Native<instruction_set_t::avx>::getExtCigar(uchar_t *ext_ci
 	uint32_t h_val, v_val, d_val, c_val;
 
 	c_val = edit_dist;
+	bool inIndel = false;
 	affine_score = 0;
 	num_events = 0;
 	ext_cigar[0] = 0;
-	bool inIndel = false;
 	string_reader_t quality_reader(quality, seq_len, dir);
 
 	while (read_pos && pos) {
@@ -629,11 +628,11 @@ void LevMyers128Native<instruction_set_t::avx>::save(const std::string& filename
 		file << std::dec << i << "," << code2symbol[genome_prefetch[i]];
 
 
-		file << endl << "D0: " << printVec2uq(bp128_M[i][0].D0)
-			<< endl << "HN: " << printVec2uq(bp128_M[i][0].HN)
-			<< endl << "HP: " << printVec2uq(bp128_M[i][0].HP)
-			<< endl << "VN: " << printVec2uq(bp128_M[i][0].VN)
-			<< endl << "VP: " << printVec2uq(bp128_M[i][0].VP)
+		file << endl << "D0: " << printVec2uq(bp128_M[i][0].D0) << ","
+			<< endl << "HN: " << printVec2uq(bp128_M[i][0].HN) << ","
+			<< endl << "HP: " << printVec2uq(bp128_M[i][0].HP) << ","
+			<< endl << "VN: " << printVec2uq(bp128_M[i][0].VN) << ","
+			<< endl << "VP: " << printVec2uq(bp128_M[i][0].VP) << ","
 			/*	<< endl
 			<< endl << "X0: " << printVec2uq(bp128_M[i][0].X0)
 			<< endl << "X1: " << printVec2uq(bp128_M[i][0].X1)

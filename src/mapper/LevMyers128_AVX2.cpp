@@ -352,7 +352,7 @@ bool LevMyers128Native<instruction_set_t::avx2>::dynamicProgramming(
 
 	bp128_t * __restrict curr_bp_M = bp128_M[1];
 
-	// !!! Caly kod tej funkcji jest przy zalozeniu, ze seq_len <= 128
+	// Assumption: seq_len <= 128
 	// Genome prefetch
 	uchar_t * __restrict ptr = genome_prefetch;
 	uchar_t *genome_ptr = ref_ptr + (ref_pos >> 1);
@@ -467,7 +467,7 @@ bool LevMyers128Native<instruction_set_t::avx2>::dynamicProgramming(
 			if (--curr_ed < min_ed)
 			{
 				min_ed = curr_ed;
-				min_ed_pos = j - (seq_len / 64); // FIXME: sprawdziæ dla odczytów o d³ugoœci k * 64
+				min_ed_pos = j - (seq_len / 64); 
 			}
 		}
 		else
@@ -556,8 +556,8 @@ ref_pos_t LevMyers128Native<instruction_set_t::avx2>::getExtCigar(uchar_t *ext_c
 
 			if (d_val <= h_val && d_val <= v_val) {
 				// mismatch
-				affine_score += scoring.mismatch;
-				inIndel = true;
+				affine_score += scoring.mismatch; //quality_reader[read_pos];
+				inIndel = false;
 				++num_events;
 
 				ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos - 1]];

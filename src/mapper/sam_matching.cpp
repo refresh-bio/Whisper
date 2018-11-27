@@ -303,7 +303,7 @@ bool CSamGenerator::find_pairs<MatchingMethod::LevMyers>(
 		: levMyers64;
 
 	levMyers[1] = (sequence_len[1] < 256)
-		? (sequence_len[0] < 128) ? levMyers128 : levMyers256
+		? (sequence_len[1] < 128) ? levMyers128 : levMyers256
 		: levMyers64;
 
 	uint32_t paired_raw_pos;
