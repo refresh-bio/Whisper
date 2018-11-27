@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.1
-// Date    : 2018-07-10
+// Version : 1.2
+// Date    : 2018-11-27
 // License : GNU GPL 3
 // *******************************************************************************************
 

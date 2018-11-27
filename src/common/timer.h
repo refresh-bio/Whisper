@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.1
-// Date    : 2018-07-10
+// Version : see defs.h
+// Date    : see defs.h
 // License : GNU GPL 3
 // *******************************************************************************************
 // The source codes are based on codes written by Dennis and published:
