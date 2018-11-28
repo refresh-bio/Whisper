@@ -124,7 +124,7 @@ readsC_3;readsC_2
 
 ## Citing
 
-[Deorowicz, S., Debudaj-Grabysz, A., Gudyś, A., Grabowski, S. (2017) Whisper: Read sorting allows robust mapping of sequencing data, bioRxiv](https://www.biorxiv.org/content/early/2017/12/28/240358) DOI: 10.1101/240358  
+[Deorowicz, S., Debudaj-Grabysz, A., Gudyś, A., Grabowski, S. (2018) Whisper: Read sorting allows robust mapping of sequencing data, Bioinformatics, bty927](https://academic.oup.com/bioinformatics/advance-article-abstract/doi/10.1093/bioinformatics/bty927/5165374?redirectedFrom=fulltext)
 
 
 
