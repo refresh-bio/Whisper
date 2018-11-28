@@ -25,7 +25,7 @@ protected:
 		simd128_t D0, VP, VN, HN, HP;
 	} bp128_t;
 
-	// Structures for Myers's bit-parallel algorithm (128-bit SSE2 version)
+	// Structures for Myers's bit-parallel algorithm (128-bit version)
 	uint32_t bp128_n_words;
 	uchar_t* genome_prefetch;
 	void *bp128_raw_ptr_M;
@@ -33,7 +33,7 @@ protected:
 	bp128_t **bp128_M;
 
 public:
-	LevMyers128(uint32_t _max_query_len, uint32_t _max_text_len, uint32_t _max_ed);
+	LevMyers128(uint32_t _max_text_len, uint32_t _max_ed);
 
 	~LevMyers128()
 	{
@@ -60,29 +60,9 @@ public:
 #endif
 
 protected:
-	virtual void reallocBuffers(uint32_t _max_query_len, uint32_t _max_text_len, int rounding)
-	{
-		LevMyers64::reallocBuffers(_max_query_len, _max_text_len, rounding);
-		
-		bp128_n_words = (this->max_query_len + 128) / 128;
-		bp128_M = (bp128_t**)realloc(bp128_M, sizeof(bp128_t*) * (max_text_len + 2 + bp128_n_words));
-		bp128_raw_M = (bp128_t*)alloc_aligned(bp128_raw_ptr_M, (this->max_text_len + 2 + bp128_n_words) * bp128_n_words * sizeof(bp128_t), sizeof(simd128_t));
-
-		for (uint32_t i = 0; i < this->max_text_len + 2; ++i)
-			bp128_M[i] = &bp128_raw_M[i * bp128_n_words];
-
-		for (uint32_t i = 0; i < bp128_n_words; ++i)
-		{
-			bp128_M[0][i].VP = ~(0ull);
-			bp128_M[0][i].VN = 0;
-
-			bp128_M[0][i].HN = 0;
-			bp128_M[0][i].HP = 0;
-			bp128_M[0][i].D0 = ~(0ull);
-		}
-
-		genome_prefetch = (uchar_t*)realloc(genome_prefetch, sizeof(uchar_t) * (std::max(max_query_len, this->max_text_len) + 5)); // fixme: why + 5?
-	}
+	virtual void reallocBuffers(uint32_t _max_query_len, uint32_t _max_text_len, int rounding);
 };
+
+
 
 // EOF

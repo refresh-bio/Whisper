@@ -126,19 +126,16 @@ CSamGenerator::CSamGenerator(CParams *params, CObjects *objects, CRefSeqDesc *_r
 	case instruction_set_t::sse3s:
 	case instruction_set_t::sse41:
 	case instruction_set_t::sse42:
-		// dodaæ wersje pod ró¿ne platformy
-		levMyers128 = new LevMyers128<instruction_set_t::sse2>(params->max_read_len, max_text_len, 0);
+		levMyers128 = new LevMyers128<instruction_set_t::sse2>(max_text_len, 0);
 		levMyers256 = new LevMyers64(params->max_read_len, max_text_len, 0);
 		break;
 	case instruction_set_t::avx:
-//		levMyers128 = new LevMyers128Native<instruction_set_t::avx>(params->max_read_len, max_mate_distance, 0);
-		levMyers128 = new LevMyers128<instruction_set_t::avx>(params->max_read_len, max_text_len, 0);
+		levMyers128 = new LevMyers128<instruction_set_t::avx>( max_text_len, 0);
 		levMyers256 = new LevMyers64(params->max_read_len, max_text_len, 0);
 		break;
 	case instruction_set_t::avx2:
-//		levMyers128 = new LevMyers128Native<instruction_set_t::avx2>(params->max_read_len, max_mate_distance, 0);
-		levMyers128 = new LevMyers128<instruction_set_t::avx2>(params->max_read_len, max_text_len, 0);
-		levMyers256 = new LevMyers256(params->max_read_len, max_text_len, 0);
+		levMyers128 = new LevMyers128<instruction_set_t::avx2>(max_text_len, 0);
+		levMyers256 = new LevMyers256(max_text_len, 0);
 		break;
 	}
 

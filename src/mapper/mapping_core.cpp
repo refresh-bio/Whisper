@@ -143,6 +143,8 @@ CMappingCore::CMappingCore(CParams *params, CObjects *objects, uint32_t _stage_i
 
 	levMyers64 = new LevMyers64((uint32_t) max_read_len, (uint32_t) (max_read_len + 2 * (uint32_t)(stage_major*params->sensitivity_factor) + 2), 0);
 
+	uint32_t max_ref_len = (uint32_t)(max_read_len + 2 * (uint32_t)(stage_major*params->sensitivity_factor) + 2);
+
 	switch (instruction_set) {
 	case instruction_set_t::none:
 	case instruction_set_t::sse:
@@ -152,16 +154,16 @@ CMappingCore::CMappingCore(CParams *params, CObjects *objects, uint32_t _stage_i
 	case instruction_set_t::sse3s:
 	case instruction_set_t::sse41:
 	case instruction_set_t::sse42:
-		levMyers128 = new LevMyers128<instruction_set_t::sse2>((uint32_t) max_read_len, (uint32_t) (max_read_len + 2 * (uint32_t)(stage_major*params->sensitivity_factor) + 2),	0);
-		levMyers256 = new LevMyers64((uint32_t)max_read_len, (uint32_t) (max_read_len + 2 * (uint32_t)(stage_major*params->sensitivity_factor) + 2), 0);
+		levMyers128 = new LevMyers128<instruction_set_t::sse2>(max_ref_len,	0);
+		levMyers256 = new LevMyers64((uint32_t)max_read_len, max_ref_len, 0);
 		break;
 	case instruction_set_t::avx:
-		levMyers128 = new LevMyers128<instruction_set_t::avx>((uint32_t) max_read_len, (uint32_t) (max_read_len + 2 * (uint32_t)(stage_major*params->sensitivity_factor) + 2), 0);
-		levMyers256 = new LevMyers64((uint32_t) max_read_len, (uint32_t) (max_read_len + 2 * (uint32_t)(stage_major*params->sensitivity_factor) + 2), 0);
+		levMyers128 = new LevMyers128<instruction_set_t::avx>(max_ref_len, 0);
+		levMyers256 = new LevMyers64((uint32_t) max_read_len, max_ref_len, 0);
 		break;
 	case instruction_set_t::avx2:
-		levMyers128 = new LevMyers128<instruction_set_t::avx2>((uint32_t) max_read_len, (uint32_t) (max_read_len + 2 * (uint32_t)(stage_major*params->sensitivity_factor) + 2),	0);
-		levMyers256 = new LevMyers256((uint32_t) max_read_len, (uint32_t) (max_read_len + 2 * (uint32_t)(stage_major*params->sensitivity_factor) + 2), 0);
+		levMyers128 = new LevMyers128<instruction_set_t::avx2>(max_ref_len,	0);
+		levMyers256 = new LevMyers256(max_ref_len, 0);
 		break;
 	}
 

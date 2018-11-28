@@ -30,13 +30,13 @@ using namespace std;
 #define GET_CHAR_FROM_GENOME(j) ((left_end_index_in_gen + (j)) & 1 ? LO_NIBBLE(ref_ptr[(left_end_index_in_gen+(j))>>1]) : HI_NIBBLE(ref_ptr[(left_end_index_in_gen+(j))>>1]))
 
 // ************************************************************************************
-LevMyers256::LevMyers256(uint32_t _max_query_len, uint32_t _max_text_len, uint32_t _max_ed)
-	: LevMyers64(_max_query_len, _max_text_len, _max_ed, 4),
+LevMyers256::LevMyers256(uint32_t _max_text_len, uint32_t _max_ed)
+	: LevMyers64(255, _max_text_len, _max_ed, 4),
 	genome_prefetch(nullptr),
 	bp256_raw_ptr_M(nullptr),
 	bp256_M(nullptr)
 {
-	reallocBuffers(_max_query_len, _max_text_len, 4);
+	reallocBuffers(max_query_len, _max_text_len, 4);
 }
 
 // ************************************************************************************

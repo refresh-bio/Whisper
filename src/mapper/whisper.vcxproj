@@ -182,6 +182,7 @@
     <ClInclude Include="edit_dist.h" />
     <ClInclude Include="LevMyers.h" />
     <ClInclude Include="LevMyers128.h" />
+    <ClInclude Include="LevMyers128.hpp" />
     <ClInclude Include="LevMyers128Native.h" />
     <ClInclude Include="LevMyers256.h" />
     <ClInclude Include="mapper.h" />

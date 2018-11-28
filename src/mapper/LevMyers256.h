@@ -31,7 +31,7 @@ protected:
 	bp256_t **bp256_M;
 
 public:
-	LevMyers256(uint32_t _max_query_len, uint32_t _max_text_len, uint32_t _max_ed);
+	LevMyers256(uint32_t _max_text_len, uint32_t _max_ed);
 	
 	~LevMyers256() {
 		free(bp256_M);
