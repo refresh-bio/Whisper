@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.1
-// Date    : 2018-07-10
+// Version : see defs.h
+// Date    : see defs.h
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -389,7 +389,7 @@ void CSoftClipping::getExtCigar(
 			// deletion wrt reference - write corresponding reference symbols
 			for (int i = 0; i < del_size; ++i, ++pos) {
 				ext_cigar[cigar_pos++] = '^';
-				ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos - 1]];
+				ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos]];
 			}
 		}
 		else {
@@ -398,7 +398,7 @@ void CSoftClipping::getExtCigar(
 
 			for (int i = 0; i < -del_size; ++i, ++read_pos) {
 				ext_cigar[cigar_pos++] = '#';
-				ext_cigar[cigar_pos++] = decode[tmp_read_sequence[read_pos]];
+				ext_cigar[cigar_pos++] = decode[tmp_read_sequence[read_pos + 1]];
 			}
 		}
 

@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.1
-// Date    : 2018-07-10
+// Version : see defs.h
+// Date    : see defs.h
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -450,16 +450,6 @@ void LevMyers64::save(const std::string& filename)
 		file << endl << "VP: ";
 		for (uint32_t j = 0; j < bp_n_words; ++j) { file << std::hex << std::setw(16) << bp_M[i][j].VP << ", "; }
 		file << endl;
-
-/*		file << endl << "X0: ";
-		for (int j = 0; j < bp_n_words; ++j) { file << std::hex << std::setw(16) << bp_M[i][j].X0 << ","; }
-		file << endl << "X1: ";
-		for (int j = 0; j < bp_n_words; ++j) { file << std::hex << std::setw(16) << bp_M[i][j].X1 << ","; }
-		file << endl << "X2: ";
-		for (int j = 0; j < bp_n_words; ++j) { file << std::hex << std::setw(16) << bp_M[i][j].X2 << ","; }
-		file << endl << "X3: ";
-		for (int j = 0; j < bp_n_words; ++j) { file << std::hex << std::setw(16) << bp_M[i][j].X3 << ","; }
-		file << endl << endl;*/
 
 		file << endl;
 	}

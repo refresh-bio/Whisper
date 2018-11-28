@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.1
-// Date    : 2018-07-10
+// Version : see defs.h
+// Date    : see defs.h
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -296,11 +296,6 @@ void LevMyers256::save(const std::string& filename) {
 		 << endl << "HP: " << printVec4uq(bp256_M[i][0].HP)
 		 << endl << "VN: " << printVec4uq(bp256_M[i][0].VN)
 		 << endl << "VP: " << printVec4uq(bp256_M[i][0].VP)
-	/*	<< endl
-		<< endl << "X0: " << printVec4uq(bp256_M[i][0].X0)
-		<< endl << "X1: " << printVec4uq(bp256_M[i][0].X1)
-		<< endl << "X2: " << printVec4uq(bp256_M[i][0].X2)
-		<< endl << "X3: " << printVec4uq(bp256_M[i][0].X3)*/
 		 << endl << endl;
 	}
 }
