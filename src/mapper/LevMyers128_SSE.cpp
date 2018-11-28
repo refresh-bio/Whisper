@@ -299,12 +299,6 @@ void LevMyers128<instruction_set_t::sse2>::save(const std::string& filename)
 			<< endl << "HP: " << printVec2uq(bp128_M[i][0].HP)
 			<< endl << "VN: " << printVec2uq(bp128_M[i][0].VN)
 			<< endl << "VP: " << printVec2uq(bp128_M[i][0].VP)
-		/*	<< endl 
-			<< endl << "X0: " << printVec2uq(bp128_M[i][0].X0)
-			<< endl << "X1: " << printVec2uq(bp128_M[i][0].X1)
-			<< endl << "X2: " << printVec2uq(bp128_M[i][0].X2)
-			<< endl << "X3: " << printVec2uq(bp128_M[i][0].X3)
-*/
 			<< endl << endl;
 	}
 }
