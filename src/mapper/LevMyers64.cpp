@@ -198,6 +198,8 @@ bool LevMyers64::dynamicProgramming(ref_pos_t ref_pos, uint32_t max_distance_in_
 	uint64_t X;
 	uint32_t red_m = (seq_len - 1) % 64;
 	uint64_t mask_m = 1ull << red_m;
+	auto local_bp_n_words = (seq_len - 1 + 64) / 64;
+
 
 	uint32_t min_ed = seq_len;
 	uint32_t min_ed_pos = 0;
@@ -259,7 +261,7 @@ bool LevMyers64::dynamicProgramming(ref_pos_t ref_pos, uint32_t max_distance_in_
 		}*/
 
 		// r > 1
-		for (r = 1; r < bp_n_words; ++r)
+		for (r = 1; r < local_bp_n_words; ++r)
 		{
 			curr_bp_M++;
 			prev_bp_M++;
@@ -303,6 +305,12 @@ bool LevMyers64::dynamicProgramming(ref_pos_t ref_pos, uint32_t max_distance_in_
 		else if (curr_ed == min_ed)
 			if(min_ed_pos + 1 == j)
 				min_ed_pos = j;
+
+		for (r = local_bp_n_words; r < bp_n_words; ++r)
+		{
+			curr_bp_M++;
+			prev_bp_M++;
+		}
 
 		curr_bp_M++;
 		prev_bp_M++;

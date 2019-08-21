@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.27004.2006
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "whisper-index", "index\whisper-index.vcxproj", "{2E8265A0-3485-4D69-972C-B0A6C07768FC}"
 EndProject
@@ -75,9 +75,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "linux", "linux", "{F306415C
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{666F216E-BA05-465F-BEC4-9BF98C26C4A3}"
-	ProjectSection(SolutionItems) = preProject
-		Performance1.psess = Performance1.psess
-	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -111,7 +108,7 @@ Global
 		{48438138-795A-453F-9CA8-AA1CE55470D9} = {9598292E-7958-420E-845F-510F6F10D2B6}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {38C973AC-80AF-4716-9BA9-3CDB22496ECE}
 		VisualSVNWorkingCopyRoot = .
+		SolutionGuid = {38C973AC-80AF-4716-9BA9-3CDB22496ECE}
 	EndGlobalSection
 EndGlobal

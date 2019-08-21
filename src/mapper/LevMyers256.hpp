@@ -30,7 +30,8 @@ using namespace std;
 #define GET_CHAR_FROM_GENOME(j) ((left_end_index_in_gen + (j)) & 1 ? LO_NIBBLE(ref_ptr[(left_end_index_in_gen+(j))>>1]) : HI_NIBBLE(ref_ptr[(left_end_index_in_gen+(j))>>1]))
 
 // ************************************************************************************
-LevMyers256::LevMyers256(uint32_t _max_text_len, uint32_t _max_ed)
+template <instruction_set_t instruction_set>
+LevMyers256<instruction_set>::LevMyers256(uint32_t _max_text_len, uint32_t _max_ed)
 	: LevMyers64(255, _max_text_len, _max_ed, 4),
 	genome_prefetch(nullptr),
 	bp256_raw_ptr_M(nullptr),
@@ -40,13 +41,44 @@ LevMyers256::LevMyers256(uint32_t _max_text_len, uint32_t _max_ed)
 }
 
 // ************************************************************************************
-bool LevMyers256::dynamicProgramming(
+template <instruction_set_t instruction_set>
+void LevMyers256<instruction_set>::reallocBuffers(uint32_t _max_query_len, uint32_t _max_text_len, int rounding)
+{
+	this->max_query_len = _max_query_len;
+	this->max_text_len = _max_text_len,
+
+		bp256_n_words = (max_query_len + 256) / 256;
+	bp256_M = (bp256_t**)realloc(bp256_M, sizeof(bp256_t*) * (max_text_len + 4 + bp256_n_words)); // + 4 because 256 bit
+	bp256_raw_M = (bp256_t *)alloc_aligned(bp256_raw_ptr_M, (max_text_len + 4 + bp256_n_words) * bp256_n_words * sizeof(bp256_t), sizeof(simd256_t));
+
+	for (uint32_t i = 0; i < max_text_len + 4; ++i)
+		bp256_M[i] = &bp256_raw_M[i * bp256_n_words];
+
+	for (uint32_t i = 0; i < bp256_n_words; ++i)
+	{
+		bp256_M[0][i].VP = ~(0ull);
+		bp256_M[0][i].VN = 0;
+
+		bp256_M[0][i].HN = 0;
+		bp256_M[0][i].HP = 0;
+		bp256_M[0][i].D0 = ~(0ull);
+	}
+
+	genome_prefetch = (uchar_t*)realloc(genome_prefetch, sizeof(uchar_t) * (std::max(max_query_len, max_text_len) + 5));
+}
+
+
+// ************************************************************************************
+template <instruction_set_t instruction_set>
+bool LevMyers256<instruction_set>::dynamicProgramming(
 	ref_pos_t ref_pos, uint32_t max_distance_in_ref, uint32_t max_mate_edit_distance, ref_pos_t &pos, uint32_t &edit_distance) 
 {
 	uint32_t j;
 
 	// Searching
-	uint32_t red_m = (seq_len - 1) % 256;
+	uint32_t seq_len_m1 = seq_len - 1;
+	uint32_t red_m = (seq_len_m1) % 256;
+	uint32_t word_num = seq_len_m1 / 64;
 	Vec4uq red_m_mask = 0;
 	red_m_mask.set_bit(red_m, 1);
 
@@ -139,11 +171,11 @@ bool LevMyers256::dynamicProgramming(
 			if (--curr_ed < min_ed)
 			{
 				min_ed = curr_ed;
-				min_ed_pos = j - (seq_len / 64); 
+				min_ed_pos = j - word_num;
 			}
 			else if (curr_ed == min_ed)
-				if (min_ed_pos + 1 == j - (seq_len / 64))
-					min_ed_pos = j - (seq_len / 64); 
+				if (min_ed_pos + 1 == j - word_num)
+					min_ed_pos = j - word_num;
 		}
 		else
 		{
@@ -151,8 +183,8 @@ bool LevMyers256::dynamicProgramming(
 		//	if (horizontal_or(curr_bp_M->HP & red_m_mask != 0))
 				curr_ed++;
 			else if (curr_ed == min_ed)
-				if(min_ed_pos + 1 == j - (seq_len / 64))
-					min_ed_pos = j - (seq_len / 64); 
+				if(min_ed_pos + 1 == j - word_num)
+					min_ed_pos = j - word_num;
 
 			if (curr_ed > max_distance_in_ref + 1 - j + max_mate_edit_distance)
 				break;
@@ -174,7 +206,8 @@ bool LevMyers256::dynamicProgramming(
 }
 
 // ************************************************************************************
-ref_pos_t LevMyers256::getExtCigar(uchar_t *ext_cigar, uchar_t* tmp_ref_sequence, uchar_t* tmp_read_sequence, uchar_t* quality,
+template <instruction_set_t instruction_set>
+ref_pos_t LevMyers256<instruction_set>::getExtCigar(uchar_t *ext_cigar, uchar_t* tmp_ref_sequence, uchar_t* tmp_read_sequence, uchar_t* quality,
 	ref_pos_t pos, uint32_t edit_dist, uint32_t seq_len, genome_t dir, const scoring_t &scoring, double& affine_score, uint32_t& num_events) 
 {
 	uint32_t read_pos = seq_len;
@@ -285,7 +318,8 @@ ref_pos_t LevMyers256::getExtCigar(uchar_t *ext_cigar, uchar_t* tmp_ref_sequence
 
 // ************************************************************************************
 #ifdef _DEVELOPMENT_MODE
-void LevMyers256::save(const std::string& filename) {
+template <instruction_set_t instruction_set>
+void LevMyers256<instruction_set>::save(const std::string& filename) {
 
 	std::ofstream file(filename);
 

@@ -159,11 +159,11 @@ CMappingCore::CMappingCore(CParams *params, CObjects *objects, uint32_t _stage_i
 		break;
 	case instruction_set_t::avx:
 		levMyers128 = new LevMyers128<instruction_set_t::avx>(max_ref_len, 0);
-		levMyers256 = new LevMyers64((uint32_t) max_read_len, max_ref_len, 0);
+		levMyers256 = new LevMyers256<instruction_set_t::avx>(max_ref_len, 0);
 		break;
 	case instruction_set_t::avx2:
 		levMyers128 = new LevMyers128<instruction_set_t::avx2>(max_ref_len,	0);
-		levMyers256 = new LevMyers256(max_ref_len, 0);
+		levMyers256 = new LevMyers256<instruction_set_t::avx2>(max_ref_len, 0);
 		break;
 	}
 

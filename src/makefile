@@ -16,8 +16,10 @@ $(MAPPER_MAIN_DIR)/LevMyers128_AVX.o :  $(MAPPER_MAIN_DIR)/LevMyers128_AVX.cpp
 	$(CC) $(CFLAGS_AVX) -c  $(MAPPER_MAIN_DIR)/LevMyers128_AVX.cpp -o $@
 $(MAPPER_MAIN_DIR)/LevMyers128_AVX2.o :  $(MAPPER_MAIN_DIR)/LevMyers128_AVX2.cpp
 	$(CC) $(CFLAGS_AVX2) -c  $(MAPPER_MAIN_DIR)/LevMyers128_AVX2.cpp -o $@
-$(MAPPER_MAIN_DIR)/LevMyers256.o :  $(MAPPER_MAIN_DIR)/LevMyers256.cpp
-	$(CC) $(CFLAGS_AVX2) -c  $(MAPPER_MAIN_DIR)/LevMyers256.cpp -o $@
+$(MAPPER_MAIN_DIR)/LevMyers256_AVX.o :  $(MAPPER_MAIN_DIR)/LevMyers256_AVX.cpp
+	$(CC) $(CFLAGS_AVX) -c  $(MAPPER_MAIN_DIR)/LevMyers256_AVX.cpp -o $@
+$(MAPPER_MAIN_DIR)/LevMyers256_AVX2.o :  $(MAPPER_MAIN_DIR)/LevMyers256_AVX2.cpp
+	$(CC) $(CFLAGS_AVX2) -c  $(MAPPER_MAIN_DIR)/LevMyers256_AVX2.cpp -o $@
 
 $(MAPPER_MAIN_DIR)/simd_utils_128_AVX.o :  $(MAPPER_MAIN_DIR)/simd_utils_128_AVX.cpp
 	$(CC) $(CFLAGS_AVX) -c  $(MAPPER_MAIN_DIR)/simd_utils_128_AVX.cpp -o $@
@@ -40,7 +42,8 @@ whisper: $(MAPPER_MAIN_DIR)/whisper.o \
 	$(MAPPER_MAIN_DIR)/LevMyers128_SSE.o \
 	$(MAPPER_MAIN_DIR)/LevMyers128_AVX.o \
 	$(MAPPER_MAIN_DIR)/LevMyers128_AVX2.o \
-	$(MAPPER_MAIN_DIR)/LevMyers256.o \
+	$(MAPPER_MAIN_DIR)/LevMyers256_AVX.o \
+	$(MAPPER_MAIN_DIR)/LevMyers256_AVX2.o \
 	$(MAPPER_MAIN_DIR)/mapper.o \
 	$(MAPPER_MAIN_DIR)/mapping_core.o \
 	$(MAPPER_MAIN_DIR)/mapping_core_sa.o \
@@ -80,7 +83,8 @@ whisper: $(MAPPER_MAIN_DIR)/whisper.o \
 	$(MAPPER_MAIN_DIR)/LevMyers128_SSE.o \
 	$(MAPPER_MAIN_DIR)/LevMyers128_AVX.o \
 	$(MAPPER_MAIN_DIR)/LevMyers128_AVX2.o \
-	$(MAPPER_MAIN_DIR)/LevMyers256.o \
+	$(MAPPER_MAIN_DIR)/LevMyers256_AVX.o \
+	$(MAPPER_MAIN_DIR)/LevMyers256_AVX2.o \
 	$(MAPPER_MAIN_DIR)/mapper.o \
 	$(MAPPER_MAIN_DIR)/mapping_core.o \
 	$(MAPPER_MAIN_DIR)/mapping_core_sa.o \

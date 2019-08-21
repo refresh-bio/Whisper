@@ -14,6 +14,7 @@
 #include "LevMyers.h"
 
 // ************************************************************************************
+template <instruction_set_t instruction_set>
 class LevMyers256 : public LevMyers64 
 {
 protected:
@@ -57,30 +58,7 @@ public:
 #endif
 
 protected:
-	virtual void reallocBuffers(uint32_t _max_query_len, uint32_t _max_text_len, int rounding)
-	{
-		this->max_query_len = _max_query_len;
-		this->max_text_len = _max_text_len,
-
-		bp256_n_words = (max_query_len + 256) / 256;
-		bp256_M = (bp256_t**)realloc(bp256_M, sizeof(bp256_t*) * (max_text_len + 4 + bp256_n_words)); // + 4 because 256 bit
-		bp256_raw_M = (bp256_t *)alloc_aligned(bp256_raw_ptr_M, (max_text_len + 4 + bp256_n_words) * bp256_n_words * sizeof(bp256_t), sizeof(simd256_t));
-
-		for (uint32_t i = 0; i < max_text_len + 4; ++i)
-			bp256_M[i] = &bp256_raw_M[i * bp256_n_words];
-
-		for (uint32_t i = 0; i < bp256_n_words; ++i)
-		{
-			bp256_M[0][i].VP = ~(0ull);
-			bp256_M[0][i].VN = 0;
-
-			bp256_M[0][i].HN = 0;
-			bp256_M[0][i].HP = 0;
-			bp256_M[0][i].D0 = ~(0ull);
-		}
-
-		genome_prefetch =  (uchar_t*)realloc(genome_prefetch, sizeof(uchar_t) * (std::max(max_query_len, max_text_len) + 5));
-	}
+	virtual void reallocBuffers(uint32_t _max_query_len, uint32_t _max_text_len, int rounding);
 };
 
 // EOF 

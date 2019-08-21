@@ -130,12 +130,12 @@ CSamGenerator::CSamGenerator(CParams *params, CObjects *objects, CRefSeqDesc *_r
 		levMyers256 = new LevMyers64(params->max_read_len, max_text_len, 0);
 		break;
 	case instruction_set_t::avx:
-		levMyers128 = new LevMyers128<instruction_set_t::avx>( max_text_len, 0);
-		levMyers256 = new LevMyers64(params->max_read_len, max_text_len, 0);
+		levMyers128 = new LevMyers128<instruction_set_t::avx>(max_text_len, 0);
+		levMyers256 = new LevMyers256<instruction_set_t::avx>(max_text_len, 0);
 		break;
 	case instruction_set_t::avx2:
 		levMyers128 = new LevMyers128<instruction_set_t::avx2>(max_text_len, 0);
-		levMyers256 = new LevMyers256(max_text_len, 0);
+		levMyers256 = new LevMyers256<instruction_set_t::avx2>(max_text_len, 0);
 		break;
 	}
 

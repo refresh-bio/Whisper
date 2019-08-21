@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.2
-// Date    : 2018-11-27
+// Version : 1.2.1
+// Date    : 2019-08-21
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -34,7 +34,7 @@
 #include <string>
 using namespace std;
 
-#define MAPPER_VERSION		"1.2 (2018-11-27)"
+#define MAPPER_VERSION		"1.2.1 (2019-08-21)"
 #define MAPPER_ID			"Whisper"
 #define MAPPER_NAME			"Whisper"
 
