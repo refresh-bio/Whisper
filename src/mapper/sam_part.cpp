@@ -14,7 +14,9 @@
 //#include "../libs/libdeflate.h"
 
 // *******************************************************************************************
-CSamPart::CSamPart(CParams *params, CObjects *objects)
+CSamPart::CSamPart(CParams *params, CObjects *objects) :
+	mapped_part(nullptr),
+	mapped_part_pos(0)
 {
 	mapped_part_size = params->sam_part_size;
 	gzipped_SAM_level = params->gzipped_SAM_level;
@@ -178,7 +180,30 @@ void CSamPart::CloseLine()
 // *******************************************************************************************
 //
 // *******************************************************************************************
-CBamPart::CBamPart(CParams *params, CObjects *objects)
+CBamPart::CBamPart(CParams *params, CObjects *objects) :
+	gzipped_BAM_level(3),
+	mapped_part(nullptr),
+	mapped_part_size(0),
+	mapped_part_pos(0),
+	mapped_part_reserve(0),
+	mp_sam_parts(nullptr),
+	bgzf(nullptr),
+	ref_id(0),
+	pos(0),
+	ref_length(0),
+	mapq(0),
+	flag(0),
+	next_ref_id(0),
+	next_pos(0),
+	tlen(0),
+	read_name(nullptr),
+	read_name_len(0),
+	cigar(nullptr),
+	cigar_len(0),
+	seq(nullptr),
+	seq_len(0),
+	qual(nullptr),
+	direction(genome_t::direct)
 {
 	mapped_part_size = params->sam_part_size;
 	gzipped_BAM_level = params->gzipped_SAM_level;
@@ -191,7 +216,6 @@ CBamPart::CBamPart(CParams *params, CObjects *objects)
 	bgzf = new CBGZF(gzipped_BAM_level);
 
 	mp_sam_parts = objects->mp_sam_parts;
-
 }
 
 // *******************************************************************************************
@@ -320,13 +344,25 @@ void CBamPart::AddAuxInt(array<uchar_t, 2> _tag, int32_t _value)
 // *******************************************************************************************
 void CBamPart::AddAuxString(array<uchar_t, 2> _tag, uchar_t *_value)
 {
+	v_aux_cstring.push_back(make_pair(_tag, _value));
+}
+
+// *******************************************************************************************
+void CBamPart::AddAuxString(array<uchar_t, 2> _tag, string _value)
+{
 	v_aux_string.push_back(make_pair(_tag, _value));
+}
+
+// *******************************************************************************************
+void CBamPart::AddAuxFloat(array<uchar_t, 2> _tag, float _value)
+{
+	v_aux_float.push_back(make_pair(_tag, _value));
 }
 
 // *******************************************************************************************
 void CBamPart::CloseLine()
 {
-	uint32_t record_start_pos = mapped_part_pos;
+	uint32_t record_start_pos = (uint32_t) mapped_part_pos;
 
 	mapped_part_pos += 4;		// skip space for total length of alignment
 	
@@ -336,7 +372,7 @@ void CBamPart::CloseLine()
 	StoreInt32LSB(mapped_part + mapped_part_pos, pos - 1, 4);
 	mapped_part_pos += 4;
 
-	StoreUIntLSB(mapped_part + mapped_part_pos, read_name_len + 1, 1);
+	StoreUIntLSB(mapped_part + mapped_part_pos, read_name_len + 1ull, 1);
 	mapped_part_pos++;
 
 	StoreUIntLSB(mapped_part + mapped_part_pos, mapq, 1);
@@ -363,7 +399,7 @@ void CBamPart::CloseLine()
 	StoreInt32LSB(mapped_part + mapped_part_pos, tlen, 4);
 	mapped_part_pos += 4;
 
-	for (int i = 0; i < read_name_len; ++i)
+	for (uint32_t i = 0; i < read_name_len; ++i)
 		mapped_part[mapped_part_pos++] = read_name[i];
 	mapped_part[mapped_part_pos++] = 0;
 
@@ -376,24 +412,24 @@ void CBamPart::CloseLine()
 	// Store SEQ
 	if (direction == genome_t::direct)
 	{
-		for (int i = 0; i < seq_len / 2; ++i)
+		for (uint32_t i = 0; i < seq_len / 2; ++i)
 			mapped_part[mapped_part_pos++] = (a_seq_code_dir[seq[2 * i]] << 4) + a_seq_code_dir[seq[2 * i + 1]];
 		if (seq_len & 1)
 			mapped_part[mapped_part_pos++] = a_seq_code_dir[seq[seq_len - 1]] << 4;
 	}
 	else
 	{
-		for (int i = 0; i < seq_len / 2; ++i)
+		for (uint32_t i = 0; i < seq_len / 2; ++i)
 			mapped_part[mapped_part_pos++] = (a_seq_code_rc[seq[seq_len - 2 * i - 1]] << 4) + a_seq_code_rc[seq[seq_len - (2 * i + 1) - 1]];
 		if (seq_len & 1)
 			mapped_part[mapped_part_pos++] = a_seq_code_rc[seq[0]] << 4;
 	}
 
 	if(direction == genome_t::direct)
-		for (int i = 0; i < seq_len; ++i)
+		for (uint32_t i = 0; i < seq_len; ++i)
 			mapped_part[mapped_part_pos++] = qual[i] - 33;
 	else
-		for (int i = seq_len-1; i >= 0; --i)
+		for (int i = (int) seq_len - 1; i >= 0; --i)
 			mapped_part[mapped_part_pos++] = qual[i] - 33;
 
 	for (auto x : v_aux_int)
@@ -405,7 +441,26 @@ void CBamPart::CloseLine()
 		mapped_part_pos += 4;
 	}
 
-	for (auto &x : v_aux_string)
+	for (auto x : v_aux_float)
+	{
+		mapped_part[mapped_part_pos++] = x.first[0];
+		mapped_part[mapped_part_pos++] = x.first[1];
+		mapped_part[mapped_part_pos++] = 'f';
+		StoreFloat(mapped_part + mapped_part_pos, x.second);
+		mapped_part_pos += 4;
+	}
+
+	for (auto &x : v_aux_cstring)
+	{
+		mapped_part[mapped_part_pos++] = x.first[0];
+		mapped_part[mapped_part_pos++] = x.first[1];
+		mapped_part[mapped_part_pos++] = 'Z';
+		for (int i = 0; x.second[i]; ++i)
+			mapped_part[mapped_part_pos++] = x.second[i];
+		mapped_part[mapped_part_pos++] = 0;
+	}
+
+	for (auto& x : v_aux_string)
 	{
 		mapped_part[mapped_part_pos++] = x.first[0];
 		mapped_part[mapped_part_pos++] = x.first[1];
@@ -418,7 +473,9 @@ void CBamPart::CloseLine()
 	StoreUIntLSB(mapped_part + record_start_pos, mapped_part_pos - record_start_pos - 4, 4);
 
 	v_aux_int.clear();
+	v_aux_float.clear();
 	v_aux_string.clear();
+	v_aux_cstring.clear();
 }
 
 // *******************************************************************************************

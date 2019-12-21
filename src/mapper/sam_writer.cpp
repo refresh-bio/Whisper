@@ -140,7 +140,7 @@ void CSamWriter::write_BAM_header(vector<string> &header_SAM, vector<pair<string
 
 	uint32_t meta_len = 0;
 	for (auto &x : header_SAM)
-		meta_len += x.size();
+		meta_len += (uint32_t) x.size();
 
 	StoreUIntLSB(raw_header, meta_len, 4);
 	for (auto &x : header_SAM)

@@ -12,11 +12,15 @@
 
 #ifndef _LevMyers_
 #define _LevMyers_
+
 #define MAX_VECTOR_SIZE 256
 #include "../common/defs.h"
 #include "../common/utils.h"
+#include "simd_utils.h"
+#pragma warning (disable: 26495 26451 6385)
 #include "../mapper/vector_utils.h"
 #include "../libs/vectorclass.h"
+#pragma warning (default: 26495 26451 6385)
 #include <algorithm>
 
 class scoring_t;
@@ -30,24 +34,27 @@ protected:
 	uint32_t max_text_len;
 
 	uint32_t cur_offset;
-	uchar_t *ref_ptr;
+	uchar_t* ref_ptr;
 	uint32_t ref_size;
 
-	uint32_t rev_comp_code[8];
+	uint32_t rev_comp_code[16];
 	uint32_t raw_code[128];
 	uint32_t raw_rev_comp_code[128];
 	uint32_t alloc_text_M;
 	uint32_t seq_len;
-	char code2symbol[8];
-
+	uchar_t last_symbol;
+	char code2symbol[16];
+	   
 public:
 	LevMyers(uint32_t _max_query_len, uint32_t _max_text_len, uint32_t _max_ed);
 	virtual ~LevMyers();
 
-	virtual void setReference(uchar_t *_ref_ptr, uint32_t _ref_size, uint32_t _cur_offset);
-	virtual bool preprocess(uchar_t *seq, uint32_t seq_len, genome_t orientation) = 0;
-	virtual bool preprocessRawSeq(uchar_t *seq, uint32_t seq_len, genome_t orientation) = 0;
-	virtual bool dynamicProgramming(ref_pos_t ref_pos, uint32_t max_distance_in_ref, uint32_t max_mate_edit_distance, ref_pos_t &pos, uint32_t &edit_distance) = 0;
+	virtual void setReference(uchar_t* _ref_ptr, uint32_t _ref_size, uint32_t _cur_offset);
+	virtual bool preprocess(uchar_t* seq, uint32_t seq_len, genome_t orientation) = 0;
+	virtual bool preprocessRawSeq(uchar_t* seq, uint32_t seq_len, genome_t orientation) = 0;
+	virtual bool dynamicProgramming(ref_pos_t ref_pos, uint32_t max_distance_in_ref, uint32_t max_mate_edit_distance, ref_pos_t& pos, uint32_t& edit_distance) = 0;
+
+	enum class matrix_dir_t { H, V, D };
 
 	/*
 	ExtCigar format description:

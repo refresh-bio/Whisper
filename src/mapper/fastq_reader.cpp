@@ -17,7 +17,7 @@
 
 #include "../common/defs.h"
 #include "../common/timer.h"
-#include "../common/fastq_reader.h"
+#include "fastq_reader.h"
 #include "../libs/asmlib.h"
 
 
@@ -51,7 +51,7 @@ bool CGZFile::Open(string file_name)
 	}
 
 	// Init stream structure
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 	stream.zalloc = Z_NULL;
 	stream.zfree = Z_NULL;
 	stream.opaque = Z_NULL;
@@ -89,7 +89,7 @@ bool CGZFile::Eof()
 {
 	if (!in)
 		return true;
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 	return is_eof && (stream.avail_in == 0);
 #endif
 
@@ -99,7 +99,7 @@ bool CGZFile::Eof()
 // ************************************************************************************
 bool CGZFile::Read(uchar_t *ptr, uint32_t to_read, uint32_t &readed, uint32_t &raw_readed)
 {
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 	if (!in)
 		return false;
 
@@ -192,7 +192,7 @@ CFastqReader::CFastqReader(bool _is_fasta, uint32_t _part_size, CObjects *_objec
 
 	// Pointers to input files in various formats (uncompressed, gzip-compressed, bzip2-compressed)
 	in		  = nullptr;
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 	in_gzip   = nullptr;
 	in_bzip2  = nullptr;
 	bzerror   = BZ_OK;
@@ -243,7 +243,7 @@ CFastqReader::~CFastqReader()
 	if(internal_buffer)
 		delete[] internal_buffer;
 
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 	if (in_gz_file)
 		delete in_gz_file;
 #endif
@@ -258,7 +258,7 @@ void CFastqReader::close_files()
 			fclose(in);
 		in = nullptr;
 	}
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 	else if(mode == mode_t::m_gzip)
 	{
 		if (in_gz_file)
@@ -287,7 +287,7 @@ void CFastqReader::Restart()
 
 	part_filled = 0;
 	mode        = mode_t::m_plain;
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 	bzerror     = BZ_OK;
 #endif
 }
@@ -296,7 +296,7 @@ void CFastqReader::Restart()
 // Open the file
 bool CFastqReader::Open(string _input_file_name)
 {
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 //	if(in || in_gzip || in_bzip2)
 	if (in || in_gz_file || in_bzip2)
 #else
@@ -320,7 +320,7 @@ bool CFastqReader::Open(string _input_file_name)
 		if((in = fopen(input_file_name.c_str(), "rb")) == nullptr)
 			return false;
 	}
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 	// Gzip-compressed file
 	else if(mode == mode_t::m_gzip)
 	{
@@ -463,7 +463,7 @@ uint32_t CFastqReader::find_nth_read(uchar_t *part, uint32_t size, uint32_t no_r
 // Read a part of the file
 bool CFastqReader::GetPartInfo(uchar_t *&part, uint32_t &size, uint32_t &no_reads)
 {
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 	if (!in && !in_gz_file && !in_bzip2)
 #else
 	if (!in)
@@ -491,7 +491,7 @@ bool CFastqReader::GetPartInfo(uchar_t *&part, uint32_t &size, uint32_t &no_read
 	// Read data
 	if (mode == mode_t::m_plain)
 		raw_readed = readed = (uint32_t)fread(part + part_filled, 1, part_size - part_filled, in);
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 	else if (mode == mode_t::m_gzip)
 		in_gz_file->Read(part + part_filled, (int)part_size - part_filled, readed, raw_readed);
 	else if(mode == mode_t::m_bzip2)
@@ -564,7 +564,7 @@ bool CFastqReader::Eof()
 {
 	if(mode == mode_t::m_plain)
 		return feof(in) != 0;
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 	else if(mode == mode_t::m_gzip)
 		return in_gz_file->Eof();
 	else if(mode == mode_t::m_bzip2)
@@ -800,7 +800,9 @@ void CPreFastqReader::process_pair_blocks(file_name_no_t file_name_no, uint32_t 
 // ************************************************************************************
 void CPreFastqReader::store_stats(double time)
 {
+#ifdef COLLECT_STATS
 	running_stats->AddValues(STAT_TIME_THR_FASTQ_READER, time);
+#endif
 }
 
 // ************************************************************************************
@@ -854,7 +856,9 @@ void CPostFastqReader::process_pair_blocks(file_name_no_t file_name_no, uint32_t
 // ************************************************************************************
 void CPostFastqReader::store_stats(double time)
 {
+#ifdef COLLECT_STATS
 	running_stats->AddValues(STAT_TIME_THR_FASTQ_READER_PP, time);
+#endif
 }
 
 // ************************************************************************************

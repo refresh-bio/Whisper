@@ -4,8 +4,8 @@
 // 
 // Authors: Sebastian Deorowicz, Agnieszka Debudaj-Grabysz, Adam Gudys
 // 
-// Version : 1.2.1
-// Date    : 2019-08-21
+// Version : see defs.h
+// Date    : see defs.h
 // License : GNU GPL 3
 // *******************************************************************************************
 
@@ -29,12 +29,12 @@
 //#define MISMATCHES_CODE
 //#define CONST_LEN_CODE
 
-//#define LEV_MYERS_ASSERTIONS
+//#define ENABLE_VCF_VARIANTS
 
 #include <string>
 using namespace std;
 
-#define MAPPER_VERSION		"1.2.1 (2019-08-21)"
+#define MAPPER_VERSION		"2.0 (2019-12-15)"
 #define MAPPER_ID			"Whisper"
 #define MAPPER_NAME			"Whisper"
 
@@ -59,6 +59,14 @@ const char sym_code_T	   = 3;
 const char sym_code_N_read = 4;
 const char sym_code_N_ref  = 5;
 
+const uint8_t mask_code_A = (uint8_t)(1u << sym_code_A);
+const uint8_t mask_code_C = (uint8_t)(1u << sym_code_C);
+const uint8_t mask_code_G = (uint8_t)(1u << sym_code_G);
+const uint8_t mask_code_T = (uint8_t)(1u << sym_code_T);
+const uint8_t mask_code_N_read = 0;
+const uint8_t mask_code_N_ref = 0;
+const uint8_t mask_code_N = 0;
+
 const uint32_t lut_short_prefix_len = 11;
 const uint32_t lut_long_prefix_len  = 12;
 
@@ -72,6 +80,8 @@ enum class genome_t {direct, rev_comp};
 enum class mapping_mode_t {first, second, all};
 enum class mapping_orientation_t {forward_forward, forward_reverse, reverse_forward};
 enum class sam_results_t {undefined, mapped, unmapped};
+enum class mapping_type_t {lev = 0, indel1 = 1, indel2 = 2, indel_clipping = 3, clipping_indel = 4, mismatches_clipping = 5, 
+	clipping_mismatches = 6, clipping_clipping = 7, none = 8};
 
 inline genome_t revert_direction(genome_t dir) { return dir == genome_t::direct ? genome_t::rev_comp : genome_t::direct; }
 
@@ -122,6 +132,8 @@ const string EXT_LUT_SHORT_DIR   = EXT_DEF_IDX + ".lut_short_dir";
 const string EXT_LUT_SHORT_RC    = EXT_DEF_IDX + ".lut_short_rc";
 const string EXT_LUT_LONG_DIR    = EXT_DEF_IDX + ".lut_long_dir";
 const string EXT_LUT_LONG_RC     = EXT_DEF_IDX + ".lut_long_rc";
+const string EXT_VCF			 = EXT_DEF_IDX + ".var";
+const string EXT_REF_SNP		 = EXT_DEF_IDX + ".ref_snp";
 
 // Project extensions
 const string EXT_DEF_PRO		 = ".whisper_prj";
@@ -144,6 +156,8 @@ const string MARKER_LUT_SHORT_DIR   = MARKER_DEF_IDX + "LUT_SHORT_DIR";
 const string MARKER_LUT_SHORT_RC    = MARKER_DEF_IDX + "LUT_SHORT_RC"; 
 const string MARKER_LUT_LONG_DIR    = MARKER_DEF_IDX + "LUT_LONG_DIR"; 
 const string MARKER_LUT_LONG_RC     = MARKER_DEF_IDX + "LUT_LONG_RC"; 
+const string MARKER_VCF             = MARKER_DEF_IDX + "VAR";
+const string MARKER_REF_SNP			= MARKER_DEF_IDX + "REF_SNP";
 
 // Project markers
 const string MARKER_DEF_PRO         = "MAP1_PRO";
@@ -190,44 +204,60 @@ const uint32_t STAT_CF_ACCEPTED_IN_MALICIOUS_GROUPS	  = 0XC000;
 const uint32_t STAT_CF_DISCARDED_IN_MALICIOUS_GROUPS  = 0XD000;
 const uint32_t STAT_LEV_POSITIVE			   = 0XE000;
 //const uint32_t STAT_LEV_NEGATIVE			   = 0XF000;
+const uint32_t STAT_INDEL_MAPPING_FOUND	       = 0XF000;
+const uint32_t STAT_INDEL_MAPPING_TESTS		   = 0X10000;
 
-const uint32_t STAT_TIME_THR_RES_WRITER        = 0x10000;
-const uint32_t STAT_TIME_THR_FASTQ_READER      = 0x10001;
-const uint32_t STAT_TIME_THR_SPLITTER          = 0x10002;
-const uint32_t STAT_TIME_THR_BIN_WRITER_BASE   = 0x11000;
-const uint32_t STAT_TIME_THR_BIN_READER_BASE   = 0x12000;
-const uint32_t STAT_TIME_THR_MAPPING_CORE_BASE = 0x13000;
-const uint32_t STAT_TIME_THR_FASTQ_READER_PP   = 0x14000;
-const uint32_t STAT_TIME_THR_RES_READER        = 0x14001;
-const uint32_t STAT_TIME_THR_SAM_GENERATOR     = 0x14002;
-const uint32_t STAT_TIME_THR_SAM_SORTING       = 0x14003;
-const uint32_t STAT_TIME_THR_SAM_PROCESSING    = 0x14004;
+const uint32_t STAT_TIME_THR_RES_WRITER        = 0x20000;
+const uint32_t STAT_TIME_THR_FASTQ_READER      = 0x20001;
+const uint32_t STAT_TIME_THR_SPLITTER          = 0x20002;
+const uint32_t STAT_TIME_THR_BIN_WRITER_BASE   = 0x21000;
+const uint32_t STAT_TIME_THR_BIN_READER_BASE   = 0x22000;
+const uint32_t STAT_TIME_THR_MAPPING_CORE_BASE = 0x23000;
+const uint32_t STAT_TIME_THR_FASTQ_READER_PP   = 0x24000;
+const uint32_t STAT_TIME_THR_RES_READER        = 0x24001;
+const uint32_t STAT_TIME_THR_SAM_GENERATOR     = 0x24002;
+const uint32_t STAT_TIME_THR_SAM_SORTING       = 0x24003;
+const uint32_t STAT_TIME_THR_SAM_PROCESSING    = 0x24004;
 
-const uint32_t STAT_PUSH_RESULTS               = 0x15000;
-const uint32_t STAT_PUSH_RESULTS_UNQ           = 0x15001;
-const uint32_t STAT_PUSH_RESULTS_SEND_BYTES    = 0x15002;
-const uint32_t STAT_PUSH_RESULTS_ADDED_BYTES   = 0x15003;
+const uint32_t STAT_PUSH_RESULTS               = 0x25000;
+const uint32_t STAT_PUSH_RESULTS_UNQ           = 0x25001;
+const uint32_t STAT_PUSH_RESULTS_SEND_BYTES    = 0x25002;
+const uint32_t STAT_PUSH_RESULTS_ADDED_BYTES   = 0x25003;
 
-const uint32_t STAT_MAPPED_SE_SINGLE		   = 0x16000;
-const uint32_t STAT_MAPPED_SE_NONE			   = 0x16001;
+const uint32_t STAT_MAPPED_SE_SINGLE		   = 0x26000;
+const uint32_t STAT_MAPPED_SE_NONE			   = 0x26001;
 
-const uint32_t STAT_MAPPED_PE_PAIR_UNQ		   = 0x16002;
-const uint32_t STAT_MAPPED_PE_PAIR_MORE		   = 0x16003;
+const uint32_t STAT_MAPPED_PE_PAIR_UNQ		   = 0x26002;
+const uint32_t STAT_MAPPED_PE_PAIR_MORE		   = 0x26003;
 
-const uint32_t  STAT_MAPPED_PE_ERRORS			= 0x16006;
+const uint32_t STAT_MAPPED_PE_ERRORS		   = 0x26006;
 
-const uint32_t STAT_MAPPED_PE_INDEPENDENT_BOTH = 0x1600A;
-const uint32_t STAT_MAPPED_PE_INDEPENDENT_SINGLE = 0x1600B;
-const uint32_t STAT_MAPPED_PE_INDEPENDENT_NONE = 0x1600C;
-const uint32_t STAT_MAPPED_PE_INDEPENDENT_ERRORS = 0x1600D;
+const uint32_t STAT_MAPPED_PE_INDEPENDENT_BOTH = 0x2600A;
+const uint32_t STAT_MAPPED_PE_INDEPENDENT_SINGLE = 0x2600B;
+const uint32_t STAT_MAPPED_PE_INDEPENDENT_NONE = 0x2600C;
+const uint32_t STAT_MAPPED_PE_INDEPENDENT_ERRORS = 0x2600D;
 
-const uint32_t STAT_MAPPED_PE_METHOD = 0x16010;
+const uint32_t STAT_MAPPED_PE_METHOD = 0x26010;
 
-const uint32_t STAT_MAPPED_PE_HISTO = 0x17000;
-const uint32_t STAT_MAPPED_PE_HISTO_CLIPPED = 0x18000;
+const uint32_t STAT_MAPPED_PE_HISTO = 0x27000;
+const uint32_t STAT_MAPPED_PE_HISTO_CLIPPED = 0x28000;
 
+const uint32_t STAT_SHORT_INDEL_REFINEMENTS_LEV = 0x28500;
+const uint32_t STAT_SHORT_INDEL_REFINEMENTS_MAPPING = 0x28501;
 
-const uint32_t STAT_BIN_TIMES = 0x20000;
+const uint32_t STAT_MAPPED_PE_HISTO_VAR_INS_LONG = 0x29000;
+const uint32_t STAT_MAPPED_PE_HISTO_VAR_DEL_LONG = 0x29500;
+const uint32_t STAT_MAX_LEN_INDELS = 100;
+
+const uint32_t STAT_BIN_TIMES = 0x30000;
+
+const uint32_t STAT_READS_LEN = 0x31000;
+const uint32_t STAT_READS_NS = 0x31300;
+const uint32_t STAT_READS_LEN_WO_NS = 0x31600;
+
+const uint32_t STAT_TIME_THR_PP_PARTS = 0x40000;
+
+const uint32_t STAT_MAX_READ_LEN = 512;
 
 #define MIN(_a, _b)			(((_a) < (_b)) ? (_a) : (_b))	
 #define MAX(_a, _b)			(((_a) > (_b)) ? (_a) : (_b))	

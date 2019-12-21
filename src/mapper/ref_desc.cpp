@@ -118,6 +118,15 @@ bool CRefSeqDesc::Translate(uint32_t raw_pos, string &seq_name, int32_t &pos, in
 }
 
 // ************************************************************************************
+// Traslate from chrom:pos to raw genome pos
+bool CRefSeqDesc::RevTranslate(uint32_t& raw_pos, int32_t pos, int32_t id)
+{
+	raw_pos = seq_desc[id].pos_in_ref_seq + (uint32_t)pos - (uint32_t)seq_desc[id].no_initial_Ns + (uint32_t)seq_desc[id].no_starting_Ns - 1u;
+
+	return true;
+}
+
+// ************************************************************************************
 // Return description of sequences in the collection
 bool CRefSeqDesc::GetDescription(vector<seq_desc_t> &_seq_desc)
 {

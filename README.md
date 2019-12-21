@@ -1,12 +1,12 @@
-# Whisper
+# Whisper2
 
 ## Installation and configuration
 
 Whisper comes with a set of precompiled binaries for Windows and Linux. They can be found under *Releases* tab.
 
 The software can be also built from the sources distributed as:
-* Visual Studio 2015 solution for Windows,
-* MAKE project (G++ 6.2 required) for Linux.
+* Visual Studio 2017 solution for Windows,
+* MAKE project (G++ 7.2 required) for Linux.
 
 NOTE
 
@@ -65,35 +65,43 @@ Parameters:
 Options:
 
  * `-b <value>` - no. of temporary files (minimum: 100, default: 384)
+ * `-clipping-distance <value>` - no. of sigmas for max. additional distance in clipping (default: 14)
  * `-d[fr/ff/rf]` - mapping orientation (default: -dfr (forward - reverse)
  * `-dist_paired <value>` - max. distance for paired read (default: 1000)
- * `-e <value>` - max. fraction of errors in % (default: 0.04, max: 0.05)
- * `-e-paired <value>` - max. fraction of errors in paired read (default: 0.06)
- * `-enable-boundary-clipping <value>` - enable clipping at boundaries when a lot of mismatches appears (default: 0)
+ * ` -e <value>` - max. no of errors (default: auto)
+ * `-e-paired <value>` - max. fraction of errors in paired read (default: 0.09)
+ * `-enable-boundary-clipping <value>` - enable clipping at boundaries when a lot of mismatches appears (default: 1)
+ * `-enable-mapping_indels <value>` - enable looking for long indels during mapping stages (default: 1)
+ * `-enable-short-indel-refinement <value>` - enable short indel refinement after mapping (default: 1)
+ * `-enable-short-reads <value>` - enable reads shorter than 90% of the longest reads (default: 0)
  * `-filter <value>` - store only mappings for given chromosome (default: )
- * `-gap-open <value>` - score for gap open (default: -6)
- * `-gap-extend <value>` - score for gap extend (default: -1)
- * `-gzipped-SAM-level <value>` - gzip compression level of SAM, 0 - no compression (default: 0)
- * `-hit-merging-threshold <value>` - minimal distance between different mappings (default: 12)
+ * `-gap-del-open <value>` - score for gap (del) open (default: -5)
+ * `-gap-del-extend <value>` - score for gap (del) extend (default: -0.4)
+ * `-gap-ins-open <value>` - score for gap (ins) open (default: -5)
+ * `-gap-ins-extend <value>` - score for gap (ins) extend (default: -0.4)
+ * `-gzipped-SAM-level <value>` - gzip compression level of SAM/BAM, 0 - no compression (default: 0)
  * `-high-confidence-sigmas <value>` - (default: 4)
+ * `-hit-merging-threshold <value>` - minimal distance between different mappings (default: 12)
  * `-hit-merging-wrt-first <value>` - calculate distance in marged group w.r.t. first (default: 1)
  * `-m[f/s/a]` - mode: first stratum/second stratum/all strata (default: first stratum)
  * `-mask-lqb <value>` - mask bases of quality lower than value (default: 0)
+ * `-max-indel-len <value>` - max. indel length (default: 50)
+ * `-min-clipped-factor <value>` - mask bases of quality lower than value (default: 1)
  * `-out <name>` - name of the output file (default: whisper)
  * `-penalty-saturation <value>` - no. of sigmas for max. penalty in matching pairs (default: 7)
- * `-rg <value>` - complete read group header line, (example: '@RG\\tID:foo\\tSM:bar'), '\t' character will be converted to a TAB in the output SAM/BAM, while the read group ID will be attached to every read
- * `-r[s|p]` - single of paired-end reads (default: single)
- * `-score-discretization-threshold <value>` - (default: 0.5)
+ * `-rg <read_group>` - complete read group header line, '\t' character will be converted to a TAB in the output SAM while the read group ID will be attached to every read (example line: '@RG     ID:foo  SM:bar')
+ * `-r[s|p]` - single or paired-end reads (default: single)
+ * `-score-discretization-threshold` (default: 0.5)
+ * `-score-clipping <value>` score for clipping (default: -6)
  * `-score-match <value>` - score for matching symbol (default: 1)
- * `-score-clipping <value>` score for clipping (default: -10)
  * `-score-mismatch <value>` - score for mismatching symbol (default: -5)
  * `-sens <value>` - turn on/off sensitive mode (default: 1)
- * `-sens-factor <value>` - sensitivity factor (default: 3)
- * `-stdout` - use stdout to store the output
- * `-store-BAM` - turn on saving in BAM
+ * `-sens-factor <value>` - sensitivity factor (default: 2.5)
+ * `-stdout` - use stdout to store the output (default: 0)
+ * `-store-BAM` - turn on saving in BAM (default: 0)
  * `-t <value>` - no. of threads (0-adjust to hardware) (default: 0)
  * `-temp <name>` - prefix for temporary files (default: ./whisper_temp_)
- * `-x <value>` - load complete suffix arrays in main memory (default: 0)`
+ * `-x` - load complete suffix arrays in main memory (default: 0)
   
   
 Examples:

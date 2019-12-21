@@ -15,7 +15,7 @@
 #include <utility>
 #include <assert.h>
 
-//#define LEV_MYERS_ASSERTIONS
+#define GET_CHAR_FROM_PATTERN(i, pattern_ptr) ((i) & 1 ? LO_NIBBLE(pattern_ptr[(i)>>1]) : HI_NIBBLE(pattern_ptr[(i)>>1]))
 
 //**********************************************************************************************************
 uint32_t CMappingCore::search_in_unknown_range_for_exact_match_diff_len_version(uchar_t* pattern_ptr, uchar_t* pattern_sft_ptr, uint32_t pattern_len,
@@ -32,12 +32,12 @@ uint32_t CMappingCore::search_in_unknown_range_for_exact_match_diff_len_version(
 	{
 		do
 		{
-			//There is nothing more to check. The basic_part contains the whole read and it has already been checked
+			// There is nothing more to check. The basic_part contains the whole read and it has already been checked
 			best_match = 0;
 			if (dir_gen_flag)
-				dir_match_positions.push_back(make_pair(sa_part[i], cur_match));
+				dir_match_positions.push_back(candidate_mapping_t::construct<mapping_type_t::lev>(sa_part[i], genome_t::direct, cur_match));
 			else
-				rc_match_positions.push_back(make_pair(ref_size - (sa_part[i]) - 1, cur_match));
+				rc_match_positions.push_back(candidate_mapping_t::construct<mapping_type_t::lev>(ref_size - (sa_part[i]) - 1, genome_t::rev_comp, cur_match));
 
 			i++;
 			if (i < sa_size)
@@ -96,13 +96,9 @@ uint32_t CMappingCore::search_in_unknown_range_for_exact_match_diff_len_version(
 			{
 				best_match = 0;
 				if (dir_gen_flag)
-				{
-					dir_match_positions.push_back(make_pair(sa_part[i], cur_match));
-				}
+					dir_match_positions.push_back(candidate_mapping_t::construct<mapping_type_t::lev>(sa_part[i], genome_t::direct, cur_match));
 				else
-				{
-					rc_match_positions.push_back(make_pair(ref_size - (sa_part[i]) - 1, cur_match));
-				}
+					rc_match_positions.push_back(candidate_mapping_t::construct<mapping_type_t::lev>(ref_size - (sa_part[i]) - 1, genome_t::rev_comp, cur_match));
 			}
 
 			i++;
@@ -178,13 +174,9 @@ uint32_t CMappingCore::search_in_known_range_for_exact_match_diff_len_version(uc
 			{
 				best_match = 0;
 				if (dir_gen_flag)
-				{
-					dir_match_positions.push_back(make_pair(sa_part[i], cur_match));
-				}
+					dir_match_positions.push_back(candidate_mapping_t::construct<mapping_type_t::lev>(sa_part[i], genome_t::direct, cur_match));
 				else
-				{
-					rc_match_positions.push_back(make_pair(ref_size - (sa_part[i]) - 1, cur_match));
-				}
+					rc_match_positions.push_back(candidate_mapping_t::construct<mapping_type_t::lev>(ref_size - (sa_part[i]) - 1, genome_t::rev_comp, cur_match));
 			}
 			i++;
 		}
@@ -205,8 +197,12 @@ uint32_t CMappingCore::search_in_unknown_range_dir_and_rc(uchar_t* pattern_ptr, 
 {
 	uint32_t i = start_SA_index;
 	uint32_t cur_match = 0;
+	int32_t cur_indel = 0;
+	bool best_left_side_indel = false;
 	uint32_t best_match = max_mismatches + 1;
 	int32_t  cmp = 0;
+
+	bool is_short_read = pattern_len < min_read_len;
 
 	LevMyers* levMyers;
 	levMyers = (pattern_len < 256)
@@ -214,44 +210,66 @@ uint32_t CMappingCore::search_in_unknown_range_dir_and_rc(uchar_t* pattern_ptr, 
 		: levMyers64;
 
 	if (max_mismatches >= lev_alg_thr)
-	{
-#ifdef LEV_MYERS_ASSERTIONS
-		edit_dist->LevMyers_PP(pattern_ptr, pattern_len, genome_t::direct);		// Direction is always direct as read is already reverse-complemented (if dir_falg is false)
-#endif
 		levMyers->preprocess(pattern_ptr, pattern_len, genome_t::direct);
-	}
+
 	while ((i < sa_size) && (cmp <= 0))
 	{
+		candidate_mapping_t candidate_mapping;
+
+		cur_indel = 0;
+		cur_match = max_mismatches + 1;
+
 		//-------------------------------DIR GENOME ----------------------------------------
 		if (dir_gen_flag)
 		{
 #ifdef USE_128b_SSE_CF_AND_DP
-			calculate_CF_128b_SEE_for_dir_and_rc_gen(start_pos, end_pos, min_read_len, sa_part[i], CF_vector_128b_SSE_dir_gen[i], dir_gen_flag);
+			// Do not calculate CF for short reads
+			if(!is_short_read)
+				calculate_CF_128b_SEE_for_dir_and_rc_gen(start_pos, end_pos, min_read_len, sa_part[i], CF_vector_128b_SSE_dir_gen[i], dir_gen_flag);
 
-			if (test_CF_128b_SSE_difference(CF_value_SSE_for_a_dir_pattern, CF_vector_128b_SSE_dir_gen[i], 4 * max_mismatches))
+			if (is_short_read || test_CF_128b_SSE_difference(CF_value_SSE_for_a_dir_pattern, CF_vector_128b_SSE_dir_gen[i], 4 * max_mismatches))
 			{
+#ifdef COLLECT_STATS
 				no_of_CF_accepted++;
+#endif
 				ref_pos_t ref_pos;
-				if (max_mismatches >= lev_alg_thr) {
+				if (max_mismatches >= lev_alg_thr)
 					levMyers->dynamicProgramming(sa_part[i] - start_pos - max_mismatches, pattern_len + 2 * max_mismatches, max_mismatches, ref_pos, cur_match);
-#ifdef LEV_MYERS_ASSERTIONS
-					uint32_t ref_pos2, cur_match2;
-					edit_dist->LevMyers(sa_part[i] - start_pos - max_mismatches, pattern_len + 2 * max_mismatches, max_mismatches, ref_pos2, cur_match2);
-					ASSERT(ref_pos == ref_pos2 && cur_match == cur_match2, "CMappingCore::search_in_unknown_range_dir_and_rc() error!");
-#endif 
-				}
 				else
 					cur_match = edit_dist->LevDiag(pattern_ptr, pattern_len, sa_part[i], start_pos, end_pos, max_mismatches, 1);
 
 				if (cur_match <= max_mismatches)
+				{
+					candidate_mapping = candidate_mapping_t::construct<mapping_type_t::lev>(sa_part[i] - CUR_OFFSET, genome_t::direct, cur_match);
+#ifdef COLLECT_STATS
 					no_of_Lev_positive++;
+#endif
+				}
 			}
 			else
 			{
 				cur_match = max_mismatches + 1;
+#ifdef COLLECT_STATS
 				no_of_CF_discarded++;
+#endif
 			}
 
+			// In sensitive mode look for matches with single indel (likely long) and a number of mismatches out of the indel
+			if (sensitive_mode && enable_mapping_indels)
+			{
+				ref_pos_t examined_start_pos = sa_part[i] - start_pos;
+				uint32_t examined_size = pattern_len + 2 * max_approx_indel_len;
+				candidate_mapping_t candidate_mapping_indel;
+
+				if(indel_matching_dir->Match(examined_start_pos, max_approx_indel_len, start_pos, end_pos-start_pos, max_mismatches, candidate_mapping_indel))
+				{
+					candidate_mapping_indel.direction = genome_t::direct;
+					candidate_mapping = candidate_mapping_t::better(candidate_mapping, candidate_mapping_indel);
+#ifdef COLLECT_STATS
+					++no_of_indel_mapping_tests;
+#endif
+				}
+			}
 #else
 			cur_match = test_selected_data(pattern_ptr, pattern_sft_ptr, pattern_len, sa_part, i, max_mismatches);
 #endif
@@ -261,59 +279,74 @@ uint32_t CMappingCore::search_in_unknown_range_dir_and_rc(uchar_t* pattern_ptr, 
 		else
 		{
 #ifdef USE_128b_SSE_CF_AND_DP
-			calculate_CF_128b_SEE_for_dir_and_rc_gen(min_read_len - end_pos, min_read_len - start_pos, min_read_len, sa_part[i], CF_vector_128b_SSE_rc_gen[i], 0);
+			if(!is_short_read)
+				calculate_CF_128b_SEE_for_dir_and_rc_gen(min_read_len - end_pos, min_read_len - start_pos, min_read_len, sa_part[i], CF_vector_128b_SSE_rc_gen[i], 0);
 
-			if (test_CF_128b_SSE_difference(CF_value_SSE_for_a_rc_pattern, CF_vector_128b_SSE_rc_gen[i], 4 * max_mismatches))
+			if (is_short_read || test_CF_128b_SSE_difference(CF_value_SSE_for_a_rc_pattern, CF_vector_128b_SSE_rc_gen[i], 4 * max_mismatches))
 			{
 				ref_pos_t ref_pos;
 				if (max_mismatches >= lev_alg_thr)
-				{
 					levMyers->dynamicProgramming(ref_size - sa_part[i] - pattern_len + start_pos - max_mismatches, pattern_len + 2 * max_mismatches, max_mismatches, ref_pos, cur_match);
-#ifdef LEV_MYERS_ASSERTIONS
-					uint32_t ref_pos2, cur_match2;
-					edit_dist->LevMyers(ref_size - sa_part[i] - pattern_len + start_pos - max_mismatches, pattern_len + 2 * max_mismatches, max_mismatches, ref_pos2, cur_match2);
-					ASSERT(ref_pos == ref_pos2 && cur_match == cur_match2, "CMappingCore::search_in_unknown_range_dir_and_rc() error!");
-#endif
-				}
 				else
 					cur_match = edit_dist->LevDiag(pattern_ptr, pattern_len, sa_part[i], pattern_len - end_pos, pattern_len - start_pos, max_mismatches, 0);
 
 				if (cur_match <= max_mismatches)
+				{
+#ifdef COLLECT_STATS
 					no_of_Lev_positive++;
+#endif
+					candidate_mapping = candidate_mapping_t::construct<mapping_type_t::lev>(ref_size - (sa_part[i] - CUR_OFFSET) - 1, genome_t::rev_comp, cur_match);
+				}
 			}
 			else
 			{
 				cur_match = max_mismatches + 1;
+#ifdef COLLECT_STATS
 				no_of_CF_discarded++;
+#endif
 			}
+			
+			// In sensitive mode look for matches with single indel (likely long) and a number of mismatches out of the indel
+			if (sensitive_mode && enable_mapping_indels)
+			{
+				ref_pos_t examined_start_pos = ref_size - sa_part[i] - pattern_len + start_pos;
+				uint32_t examined_size = pattern_len + 2 * max_approx_indel_len;
+
+				candidate_mapping_t candidate_mapping_indel;
+
+				if (indel_matching_rc->Match(examined_start_pos, max_approx_indel_len, pattern_len - end_pos, end_pos - start_pos, max_mismatches, candidate_mapping_indel))
+				{
+					candidate_mapping_indel.direction = genome_t::rev_comp;
+					candidate_mapping_indel.pos += (pattern_len - 1);
+					candidate_mapping = candidate_mapping_t::better(candidate_mapping, candidate_mapping_indel);
+#ifdef COLLECT_STATS
+					++no_of_indel_mapping_tests;
+#endif
+				}
+			}
+
 #else
 			cur_match = test_selected_rc_data(pattern_ptr, pattern_sft_ptr, pattern_len, sa_part, i, max_mismatches);
 #endif
 		}	//end_of RC_Genome
 			//--------------------------------------------------------------------------------
 
-		if (cur_match < best_match)
-			best_match = cur_match;
+		if (candidate_mapping.type != mapping_type_t::none && candidate_mapping.penalty < best_match)
+			best_match = candidate_mapping.penalty;
 
 		// Future: consider saving all found mappings not just best best one (important for all strata and partially also for first stratum)
-		if (cur_match <= max_mismatches)
+		if (candidate_mapping.type != mapping_type_t::none && candidate_mapping.penalty <= max_mismatches)
 		{
 			if (dir_gen_flag)
-			{
-				dir_match_positions.push_back(make_pair(sa_part[i] - CUR_OFFSET, cur_match));
-			}
+				dir_match_positions.push_back(candidate_mapping);
 			else
-			{
-				rc_match_positions.push_back(make_pair(ref_size - (sa_part[i] - CUR_OFFSET) - 1, cur_match));
-			}
+				rc_match_positions.push_back(candidate_mapping);
 		}
 
-		i++;
-		if (i < sa_size)
-		{
+		if (++i < sa_size)
 			cmp = check_matching_part(pattern_ptr, pattern_sft_ptr, pattern_len, sa_part[i], dir_gen_flag);
-		}
 	}
+
 	*last_index = i;
 
 	return best_match;
@@ -329,7 +362,11 @@ uint32_t CMappingCore::search_in_known_range_dir_and_rc(uchar_t* pattern_ptr, uc
 {
 	uint32_t i = start_SA_index;
 	uint32_t cur_match = 0;
+	int32_t cur_indel = 0;
 	uint32_t best_match = max_mismatches + 1;
+	bool best_left_side_indel = false;
+
+	bool is_short_read = pattern_len < min_read_len;
 
 	LevMyers* levMyers;
 	levMyers = (pattern_len < 256)
@@ -337,43 +374,68 @@ uint32_t CMappingCore::search_in_known_range_dir_and_rc(uchar_t* pattern_ptr, uc
 		: levMyers64;
 
 	if (max_mismatches >= lev_alg_thr)
-	{
-#ifdef LEV_MYERS_ASSERTIONS
-		edit_dist->LevMyers_PP(pattern_ptr, pattern_len, genome_t::direct);		// Direction is always direct as read is already reverse-complemented (if dir_falg is false)
-#endif
 		levMyers->preprocess(pattern_ptr, pattern_len, genome_t::direct);
-	}
+
 	if (start_SA_index < last_index)
 	{
 		while ((i < last_index) && (i < sa_size))
 		{
+			candidate_mapping_t candidate_mapping;
+
+			cur_indel = 0;
+			cur_match = max_mismatches + 1;
+
 			//-------------------------------DIR GENOME ----------------------------------------------------
 			if (dir_gen_flag)
 			{
 #ifdef USE_128b_SSE_CF_AND_DP
-				if (test_CF_128b_SSE_difference(CF_value_SSE_for_a_dir_pattern, CF_vector_128b_SSE_dir_gen[i], 4 * max_mismatches))
+				if (is_short_read || test_CF_128b_SSE_difference(CF_value_SSE_for_a_dir_pattern, CF_vector_128b_SSE_dir_gen[i], 4 * max_mismatches))
 				{
+#ifdef COLLECT_STATS
 					no_of_CF_accepted++;
+#endif
 					ref_pos_t ref_pos;
 					if (max_mismatches >= lev_alg_thr)
-					{
 						levMyers->dynamicProgramming(sa_part[i] - start_pos - max_mismatches, pattern_len + 2 * max_mismatches, max_mismatches, ref_pos, cur_match);
-#ifdef LEV_MYERS_ASSERTIONS
-						uint32_t ref_pos2, cur_match2;
-						edit_dist->LevMyers(sa_part[i] - start_pos - max_mismatches, pattern_len + 2 * max_mismatches, max_mismatches, ref_pos2, cur_match2);
-						ASSERT(ref_pos == ref_pos2 && cur_match == cur_match2, "CMappingCore::search_in_known_range_dir_and_rc() error!");
-#endif
-					}
 					else
 						cur_match = edit_dist->LevDiag(pattern_ptr, pattern_len, sa_part[i], start_pos, end_pos, max_mismatches, 1);
 
 					if (cur_match <= max_mismatches)
+					{
+						candidate_mapping = candidate_mapping_t::construct<mapping_type_t::lev>(sa_part[i] - start_pos, genome_t::direct, cur_match);
+#ifdef COLLECT_STATS
 						no_of_Lev_positive++;
+#endif
+					}
 				}
 				else
 				{
+#ifdef COLLECT_STATS
 					no_of_CF_discarded++;
+#endif
 					cur_match = max_mismatches + 1;
+				}
+
+				// In sensitive mode look for matches with single indel (likely long) and a number of mismatches out of the indel
+				if (sensitive_mode && enable_mapping_indels)
+				{
+					ref_pos_t examined_start_pos = sa_part[i] - start_pos;
+					uint32_t examined_size = pattern_len + 2 * max_approx_indel_len;
+
+					bool left_side_indel;
+					int32_t del_size;
+					uint32_t no_mismatches;
+
+					candidate_mapping_t candidate_mapping_indel;
+
+					if (indel_matching_dir->Match(examined_start_pos, max_approx_indel_len, start_pos, end_pos - start_pos, max_mismatches, candidate_mapping_indel))
+					{
+						candidate_mapping_indel.direction = genome_t::direct;
+						candidate_mapping = candidate_mapping_t::better(candidate_mapping, candidate_mapping_indel);
+#ifdef COLLECT_STATS
+						++no_of_indel_mapping_tests;
+#endif
+					}
 				}
 #else
 				cur_match = test_selected_data(pattern_ptr, pattern_sft_ptr, pattern_len, sa_part, i, max_mismatches);
@@ -383,27 +445,53 @@ uint32_t CMappingCore::search_in_known_range_dir_and_rc(uchar_t* pattern_ptr, uc
 			else
 			{
 #ifdef USE_128b_SSE_CF_AND_DP
-				if (test_CF_128b_SSE_difference(CF_value_SSE_for_a_rc_pattern, CF_vector_128b_SSE_rc_gen[i], 4 * max_mismatches))
+				if (is_short_read || test_CF_128b_SSE_difference(CF_value_SSE_for_a_rc_pattern, CF_vector_128b_SSE_rc_gen[i], 4 * max_mismatches))
 				{
 					ref_pos_t ref_pos;
-					if (max_mismatches >= lev_alg_thr) {
+					if (max_mismatches >= lev_alg_thr)
 						levMyers->dynamicProgramming(ref_size - sa_part[i] - pattern_len + start_pos - max_mismatches, pattern_len + 2 * max_mismatches, max_mismatches, ref_pos, cur_match);
-#ifdef LEV_MYERS_ASSERTIONS
-						uint32_t ref_pos2, cur_match2;
-						edit_dist->LevMyers(ref_size - sa_part[i] - pattern_len + start_pos - max_mismatches, pattern_len + 2 * max_mismatches, max_mismatches, ref_pos2, cur_match2);
-						ASSERT(ref_pos == ref_pos2 && cur_match == cur_match2, "CMappingCore::search_in_known_range_dir_and_rc() error!");
-#endif
-					}
 					else
 						cur_match = edit_dist->LevDiag(pattern_ptr, pattern_len, sa_part[i], pattern_len - end_pos, pattern_len - start_pos, max_mismatches, 0);
 
 					if (cur_match <= max_mismatches)
+					{
+						candidate_mapping = candidate_mapping_t::construct<mapping_type_t::lev>(ref_size - (sa_part[i] - CUR_OFFSET) - 1, genome_t::rev_comp, cur_match);
+#ifdef COLLECT_STATS
 						no_of_Lev_positive++;
+#endif
+					}
 				}
 				else
 				{
+#ifdef COLLECT_STATS
 					no_of_CF_discarded++;
+#endif
 					cur_match = max_mismatches + 1;
+				}
+
+				// In sensitive mode look for matches with single indel (likely long) and a number of mismatches out of the indel
+				if (sensitive_mode && enable_mapping_indels)
+				{
+					//				(this_hit.raw_pos - distanceThreshold + sequence_len[!r]) :
+
+					ref_pos_t examined_start_pos = ref_size - sa_part[i] - pattern_len + start_pos;
+					uint32_t examined_size = pattern_len + 2 * max_approx_indel_len;
+
+					bool left_side_indel;
+					int32_t del_size;
+					uint32_t no_mismatches;
+
+					candidate_mapping_t candidate_mapping_indel;
+
+					if (indel_matching_rc->Match(examined_start_pos, max_approx_indel_len, pattern_len - end_pos, end_pos - start_pos, max_mismatches, candidate_mapping_indel))
+					{
+						candidate_mapping_indel.direction = genome_t::rev_comp;
+						candidate_mapping_indel.pos += (pattern_len - 1);
+						candidate_mapping = candidate_mapping_t::better(candidate_mapping, candidate_mapping_indel);
+#ifdef COLLECT_STATS
+						++no_of_indel_mapping_tests;
+#endif
+					}
 				}
 #else
 				cur_match = test_selected_rc_data(pattern_ptr, pattern_sft_ptr, pattern_len, sa_part, i, max_mismatches);
@@ -411,20 +499,19 @@ uint32_t CMappingCore::search_in_known_range_dir_and_rc(uchar_t* pattern_ptr, uc
 			}//end_of RC_Genome
 			 //-----------------------------------------------------------------------------------------------
 
-			if (cur_match < best_match)
-				best_match = cur_match;
-			if (cur_match <= max_mismatches)
+			if (candidate_mapping.type != mapping_type_t::none && candidate_mapping.penalty < best_match)
+				 best_match = candidate_mapping.penalty;
+
+			if (candidate_mapping.type != mapping_type_t::none && candidate_mapping.penalty <= max_mismatches)
+			//if (cur_match <= max_mismatches)
 			{
 				if (dir_gen_flag)
-				{
-					dir_match_positions.push_back(make_pair(sa_part[i] - CUR_OFFSET, cur_match));
-				}
+					dir_match_positions.push_back(candidate_mapping);
 				else
-				{
-					rc_match_positions.push_back(make_pair(ref_size - (sa_part[i] - CUR_OFFSET) - 1, cur_match));
-				}
+					rc_match_positions.push_back(candidate_mapping);
 			}
-			i++;
+
+			++i;
 		}
 
 		return best_match;

@@ -65,10 +65,10 @@ public:
 	}
 
 	void addSample(double x, int n) {
-		double coeff = (double)(n) / (n + 1);
+		double coeff = (double)((int64_t) n) / (n + 1ll);
 
-		meanX = meanX * coeff + x / (n + 1);
-		meanX2 = meanX2 * coeff + x * x / (n + 1);
+		meanX = meanX * coeff + x / (n + 1ll);
+		meanX2 = meanX2 * coeff + x * x / (n + 1ll);
 
 		devX = std::sqrt(meanX2 - meanX * meanX);
 	}
@@ -94,24 +94,27 @@ protected:
 	size_t minSamplesCount;
 	size_t maxSamplesCount;
 	double maxPenalty;
+	double clippingDistanceSigmas;
 	double penaltySaturationSigmas;
 	double highConfidenceSigmas;
 	NormalDistribution initialDistribution;
-	NormalDistribution currentDistibution;
+	NormalDistribution currentDistribution;
 
 public:
 	InsertSizeModel(
 		double mean, double dev, int minSamplesCount, int maxSamplesCount,
-		double highConfidenceSigmas, double penaltySaturationSigmas,
+		double highConfidenceSigmas, double clippingDistanceSigmas, double penaltySaturationSigmas,
 		scoring_t scoring)
 		: scoring(scoring),
 		minSamplesCount(minSamplesCount),
 		maxSamplesCount(maxSamplesCount),
+		maxPenalty(0),
 		samplesCount(0), 
+		clippingDistanceSigmas(clippingDistanceSigmas),
 		penaltySaturationSigmas(penaltySaturationSigmas),
 		highConfidenceSigmas(highConfidenceSigmas),
 		initialDistribution(mean, dev), 
-		currentDistibution(mean, dev)		
+		currentDistribution(mean, dev)		
 	{}
 
 	virtual ~InsertSizeModel()
@@ -127,20 +130,25 @@ public:
 
 	double getMyersDev() const { return penaltySaturationSigmas * dev(); }
 
+//	double getClippingDev() const { return penaltySaturationSigmas * 4.0 * dev(); }
+	double getClippingDev() const { return clippingDistanceSigmas * 2.0 * dev(); }
+
+	double getVariantDev() const { return clippingDistanceSigmas * 2.0 * dev(); }
+
 	double getSaturationDev() const { return penaltySaturationSigmas * dev(); }
 
-	double getMinPenalty() const { return calculatePenalty(this->mean(), false); }
+	double getMinPenalty() const { return calculatePenalty((int) this->mean(), false); }
 
-	double getMaxPenalty() const { return calculatePenalty(this->mean() - getSaturationDev(), false); }
+	double getMaxPenalty() const { return calculatePenalty((int) this->mean() - (int) getSaturationDev(), false); }
 
 	void reset() {
 		samplesCount = 0;
-		currentDistibution = initialDistribution;
+		currentDistribution = initialDistribution;
 	}
 
 	/// Use samples to recalculate internal mean;
 	void addSample(double x) {
-		currentDistibution.addSample(x, samplesCount);
+		currentDistribution.addSample(x, (int) samplesCount);
 		++samplesCount;
 	}
 
@@ -173,23 +181,23 @@ public:
 	}
 
 	virtual double mean() const {
-		return currentDistibution.mean();
+		return currentDistribution.mean();
 	}
 
 	virtual double dev() const {
-		return currentDistibution.dev();
+		return currentDistribution.dev();
 	}
 
 	virtual double pdf(double x) const {
-		return currentDistibution.pdf(x);
+		return currentDistribution.pdf(x);
 	}
 
 	virtual double cdf(double x) const {
-		return currentDistibution.cdf(x);
+		return currentDistribution.cdf(x);
 	}
 
 	virtual double invcdf(double x) const {
-		return currentDistibution.invcdf(x);
+		return currentDistribution.invcdf(x);
 	}
 };
 

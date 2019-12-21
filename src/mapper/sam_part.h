@@ -14,11 +14,11 @@
 #define _SAM_PART_H
 
 #include "../common/defs.h"
-#include "../common/params.h"
+#include "params.h"
 
 #include <array>
 
-//#define STORE_EXTRA_SAM_FIELDS
+#define STORE_EXTRA_SAM_FIELDS
 
 // *******************************************************************************************
 class CSamPart
@@ -73,9 +73,8 @@ class CBamPart
 		15, 15, 15, 15,  1, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
 		15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
 		15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15 };
-
-
-	bool gzipped_BAM_level;
+	
+	uint32_t gzipped_BAM_level;
 
 	uchar_t *mapped_part;
 	uint64_t mapped_part_size;
@@ -104,7 +103,9 @@ class CBamPart
 	genome_t direction;
 
 	vector<pair<array<uchar_t, 2>, int32_t>> v_aux_int;
-	vector<pair<array<uchar_t, 2>, uchar_t*>> v_aux_string;
+	vector<pair<array<uchar_t, 2>, float>> v_aux_float;
+	vector<pair<array<uchar_t, 2>, uchar_t*>> v_aux_cstring;
+	vector<pair<array<uchar_t, 2>, string>> v_aux_string;
 
 	int reg2bin(int beg, int end);
 
@@ -132,6 +133,8 @@ public:
 
 	void AddAuxInt(array<uchar_t, 2> _tag, int32_t _value);
 	void AddAuxString(array<uchar_t, 2> _tag, uchar_t *_value);
+	void AddAuxString(array<uchar_t, 2> _tag, string _value);
+	void AddAuxFloat(array<uchar_t, 2> _tag, float _value);
 
 	void CloseLine();
 };

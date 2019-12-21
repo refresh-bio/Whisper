@@ -9,7 +9,6 @@
 // License : GNU GPL 3
 // *******************************************************************************************
 
-
 #include "mapping_core.h"
 #include <algorithm>
 #include <utility>
@@ -58,9 +57,7 @@ bool  CMappingCore::findExactMatch_diff_len_version(uchar_t* pattern_ptr, uchar_
 			}
 		}
 		else //if(cur_SA_index < sa_size)
-		{
 			*sa_start_index = cur_SA_index;
-		}
 	}
 	else
 		cmp = search_in_known_range_for_exact_match_diff_len_version(pattern_ptr, pattern_sft_ptr, pattern_len,
@@ -80,6 +77,8 @@ uint32_t CMappingCore::findMismatches_dir_and_rc(uchar_t *pattern_ptr, uchar_t *
 	uint32_t cur_SA_index;
 	uint32_t no_of_mismatches = max_mismatches + 1;
 	int32_t  cmp;
+
+	bool is_short_read = pattern_len < min_read_len;
 
 	uint32_t cur_malicious_group_length = malicious_group_length;
 	if (sensitive_mode)
@@ -113,16 +112,19 @@ uint32_t CMappingCore::findMismatches_dir_and_rc(uchar_t *pattern_ptr, uchar_t *
 			{
 				*sa_start_index = cur_SA_index;
 #ifdef USE_128b_SSE_CF_AND_DP
-				if (dir_gen_flag)
-					calculate_CF_128b_SSE_for_a_pattern(pattern_ptr, pattern_sft_ptr, min_read_len, start_pos, end_pos, CF_value_SSE_for_a_dir_pattern);
-				else
+				if (!is_short_read)
 				{
-					uint32_t diff_len = pattern_len - min_read_len;
+					if (dir_gen_flag)
+						calculate_CF_128b_SSE_for_a_pattern(pattern_ptr, pattern_sft_ptr, min_read_len, start_pos, end_pos, CF_value_SSE_for_a_dir_pattern);
+					else
+					{
+						uint32_t diff_len = pattern_len - min_read_len;
 
-					if (diff_len & 1)	                    //diff_len is odd
-						calculate_CF_128b_SSE_for_a_pattern(pattern_sft_ptr + (diff_len >> 1) + 1, pattern_ptr + (diff_len >> 1), min_read_len, min_read_len - end_pos, min_read_len - start_pos, CF_value_SSE_for_a_rc_pattern);
-					else                                    //diff_len is even
-						calculate_CF_128b_SSE_for_a_pattern(pattern_ptr + (diff_len >> 1), pattern_sft_ptr + (diff_len >> 1), min_read_len, min_read_len - end_pos, min_read_len - start_pos, CF_value_SSE_for_a_rc_pattern);
+						if (diff_len & 1)	                    //diff_len is odd
+							calculate_CF_128b_SSE_for_a_pattern(pattern_sft_ptr + (diff_len >> 1) + 1, pattern_ptr + (diff_len >> 1), min_read_len, min_read_len - end_pos, min_read_len - start_pos, CF_value_SSE_for_a_rc_pattern);
+						else                                    //diff_len is even
+							calculate_CF_128b_SSE_for_a_pattern(pattern_ptr + (diff_len >> 1), pattern_sft_ptr + (diff_len >> 1), min_read_len, min_read_len - end_pos, min_read_len - start_pos, CF_value_SSE_for_a_rc_pattern);
+					}
 				}
 #endif					
 				no_of_mismatches = search_in_unknown_range_dir_and_rc(pattern_ptr, pattern_sft_ptr, pattern_len,
@@ -152,16 +154,19 @@ uint32_t CMappingCore::findMismatches_dir_and_rc(uchar_t *pattern_ptr, uchar_t *
 	{
 
 #ifdef USE_128b_SSE_CF_AND_DP
-		if (dir_gen_flag)
-			calculate_CF_128b_SSE_for_a_pattern(pattern_ptr, pattern_sft_ptr, min_read_len, start_pos, end_pos, CF_value_SSE_for_a_dir_pattern);
-		else
+		if (!is_short_read)
 		{
-			uint32_t diff_len = pattern_len - min_read_len;
+			if (dir_gen_flag)
+				calculate_CF_128b_SSE_for_a_pattern(pattern_ptr, pattern_sft_ptr, min_read_len, start_pos, end_pos, CF_value_SSE_for_a_dir_pattern);
+			else
+			{
+				uint32_t diff_len = pattern_len - min_read_len;
 
-			if (diff_len & 1)						//diff_len is odd
-				calculate_CF_128b_SSE_for_a_pattern(pattern_sft_ptr + (diff_len >> 1) + 1, pattern_ptr + (diff_len >> 1), min_read_len, min_read_len - end_pos, min_read_len - start_pos, CF_value_SSE_for_a_rc_pattern);
-			else                                   //diff_len is even
-				calculate_CF_128b_SSE_for_a_pattern(pattern_ptr + (diff_len >> 1), pattern_sft_ptr + (diff_len >> 1), min_read_len, min_read_len - end_pos, min_read_len - start_pos, CF_value_SSE_for_a_rc_pattern);
+				if (diff_len & 1)						//diff_len is odd
+					calculate_CF_128b_SSE_for_a_pattern(pattern_sft_ptr + (diff_len >> 1) + 1, pattern_ptr + (diff_len >> 1), min_read_len, min_read_len - end_pos, min_read_len - start_pos, CF_value_SSE_for_a_rc_pattern);
+				else                                   //diff_len is even
+					calculate_CF_128b_SSE_for_a_pattern(pattern_ptr + (diff_len >> 1), pattern_sft_ptr + (diff_len >> 1), min_read_len, min_read_len - end_pos, min_read_len - start_pos, CF_value_SSE_for_a_rc_pattern);
+			}
 		}
 #endif
 		if (*inside_malicious_group)
@@ -196,7 +201,6 @@ uint32_t CMappingCore::findMismatches_dir_and_rc(uchar_t *pattern_ptr, uchar_t *
 			no_of_mismatches = search_in_known_range_dir_and_rc(pattern_ptr, pattern_sft_ptr, pattern_len,
 				sa_part, sa_size,
 				*sa_start_index, *sa_last_index, dir_gen_flag, max_mismatches);
-
 	}
 
 	return no_of_mismatches;

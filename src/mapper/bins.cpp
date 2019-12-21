@@ -53,8 +53,10 @@ CBinsWriter::CBinsWriter(CParams *params, CObjects *objects, string _name_prefix
 	n_write_bytes = 0;
 
 	// If alread registered nothing happens
+#ifdef COLLECT_STATS
 	running_stats->Register(STAT_BINS_WRITER_TOTAL, "Bin writer: sizes (total)", running_stats_t::averages);
 	running_stats->Register(STAT_BINS_WRITER_BASE + stage_id, "Bin writer: sizes (" + StageDesc(stage_id) + ")", running_stats_t::averages);
+#endif
 
 	verbosity_level = params->verbosity_level;
 
@@ -110,7 +112,9 @@ void CBinsWriter::operator()()
 
 	thr_watch.StopTimer();
 
+#ifdef COLLECT_STATS
 	running_stats->AddTotals(STAT_TIME_THR_BIN_WRITER_BASE + stage_id, thr_watch.GetElapsedTime());
+#endif
 }
 
 // ************************************************************************************
@@ -202,8 +206,10 @@ bool CBinsWriter::write_bin(uint32_t bin_id)
 	buffer_parts[bin_id].clear();
 	buffer_sizes[bin_id] = 0;
 
+#ifdef COLLECT_STATS
 	running_stats->AddValues(STAT_BINS_WRITER_TOTAL, (int64_t) offset);
 	running_stats->AddValues(STAT_BINS_WRITER_BASE + stage_id, (int64_t) offset);
+#endif
 
 	n_write_bytes += offset;
 	if(verbosity_level >= 3)
@@ -324,7 +330,9 @@ void CBinsReader::operator()()
 
 	thr_watch.StopTimer();
 
+#ifdef COLLECT_STATS
 	running_stats->AddTotals(STAT_TIME_THR_BIN_READER_BASE + stage_id, thr_watch.GetElapsedTime());
+#endif
 }
 
 // ************************************************************************************

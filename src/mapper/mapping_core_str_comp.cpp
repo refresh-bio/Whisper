@@ -9,7 +9,6 @@
 // License : GNU GPL 3
 // *******************************************************************************************
 
-
 #include "mapping_core.h"
 #include <algorithm>
 #include <utility>

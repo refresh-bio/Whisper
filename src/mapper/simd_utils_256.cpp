@@ -58,4 +58,69 @@ size_t CountEOLs256(uchar_t *ptr, size_t size)
 	return n_eols;
 }
 
+// ************************************************************************************
+// 256-bit AVX2 implementation
+size_t CountMismatches256(uchar_t* p, uchar_t* q, size_t size)
+{
+	Vec32uc v_p, v_q;
+	size_t rest = size % 32;
+	size_t r = 0;
+
+	r += CountMismatches128<instruction_set_t::avx2>(p, q, rest);
+	p + rest;
+	q += rest;
+	
+	for (size -= rest; size; p += 32, q += 32, size -= 32)
+	{
+		v_p.load(p);
+		v_q.load(q);
+
+		r += horizontal_count(v_p != v_q);
+	}
+
+	return r;
+}
+
+// ************************************************************************************
+// 256-bit AVX2 implementation
+void PrefetchDecompressed256(uchar_t* dest, uchar_t* src, uint32_t size, bool first_single_byte)
+{
+	if (first_single_byte)
+	{
+		*dest++ = *src++ & 0x0f;
+		--size;
+	}
+
+	// For simplicity of implementation 1 more byte could be prefetched
+	if (size & 1)
+		++size;
+
+	size_t rest = size % 32;
+
+	if (rest)
+	{
+		PrefetchDecompressed64(dest, src, rest, false);
+		size -= rest;
+		src += rest / 2;
+		dest += rest;
+	}
+
+	Vec16uc v_in;
+	Vec16us v_tmp, v_out;
+	Vec16us v_mask(0xf0f);
+
+	for (; size; size -= 32)
+	{
+		v_in.load(src);
+		v_tmp = extend(v_in);
+		v_out = (v_tmp << 8) ^ (v_tmp >> 4);
+		v_out &= v_mask;
+
+		v_out.store(dest);
+
+		dest += 32;
+		src += 16;
+	}
+}
+
 // EOF

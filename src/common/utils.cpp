@@ -11,6 +11,7 @@
 
 
 #include "utils.h"
+#include <malloc.h>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -227,6 +228,48 @@ int64_t CMapperFile::Read(void* data, int64_t count)
 }
 
 // ************************************************************************************
+int64_t CMapperFile::ReadUint16(uint16_t &data)
+{
+	if (state != open_mode_t::opened_for_read && state != open_mode_t::direct_stream)
+		return -1;
+
+	data = 0;
+
+	for (int i = 0; i < 2; ++i)
+	{
+		int x = getc(file);
+
+		if (x == EOF)
+			return -1;
+
+		data += ((uint16_t)x) << (8 * i);
+	}
+
+	return 2;
+}
+
+// ************************************************************************************
+int64_t CMapperFile::ReadUint32(uint32_t &data)
+{
+	if (state != open_mode_t::opened_for_read && state != open_mode_t::direct_stream)
+		return -1;
+
+	data = 0;
+
+	for (int i = 0; i < 4; ++i)
+	{
+		int x = getc(file);
+
+		if (x == EOF)
+			return -1;
+
+		data += ((uint32_t)x) << (8 * i);
+	}
+
+	return 4;
+}
+
+// ************************************************************************************
 int64_t CMapperFile::ReadString(string &data)
 {
 	data = "";
@@ -269,6 +312,23 @@ int64_t CMapperFile::WriteByte(uint32_t data)
 	putc(data, file);
 
 	return 1;
+}
+
+// ************************************************************************************
+int64_t CMapperFile::WriteUint16(uint16_t data)
+{
+	if (state != open_mode_t::opened_for_write && state != open_mode_t::direct_stream)
+		return -1;
+
+	for (int i = 0; i < 2; ++i)
+	{
+		auto x = data & 0xff;
+		data >>= 8;
+
+		putc(x, file);
+	}
+
+	return 2;
 }
 
 // ************************************************************************************
@@ -409,6 +469,16 @@ void StoreInt32LSB(uchar_t *dest, int32_t data, uint32_t no_bytes)
 		*dest++ = data & 0xff;
 		data >>= 8;
 	}
+}
+
+// ************************************************************************************
+void StoreFloat(uchar_t* dest, float data)
+{
+	uchar_t* mem = (uchar_t*) alloca(5);
+	memcpy(mem, (void *) &data, 4);
+
+	for (uint32_t i = 0; i < 4; ++i)
+		*dest++ = mem[i];
 }
 
 // ************************************************************************************
@@ -611,6 +681,24 @@ string NormalizeDirectory(string dir)
 		dir.push_back('/');
 
 	return dir;
+}
+
+// ************************************************************************************
+uchar_t DNA2Bin(uchar_t x)
+{
+	switch (x)
+	{
+	case 'A':
+		return sym_code_A;
+	case 'C':
+		return sym_code_C;
+	case 'G':
+		return sym_code_G;
+	case 'T':
+		return sym_code_T;
+	}
+
+	return sym_code_N_ref;
 }
 
 // ************************************************************************************

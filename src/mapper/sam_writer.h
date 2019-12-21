@@ -14,13 +14,13 @@
 #define _SAM_WRITER_H
 
 #include "../common/defs.h"
-#include "../common/queue.h"
-#include "../common/mmgr.h"
-#include "../common/stats.h"
+#include "queue.h"
+#include "mmgr.h"
+#include "stats.h"
 #include "../common/types.h"
-#include "../common/params.h"
+#include "params.h"
 #include "reads.h"
-#include "../common/joiner_mgr.h"
+#include "joiner_mgr.h"
 #include "soft_clipping.h"
 #include "ref_desc.h"
 #include "LevMyers.h"

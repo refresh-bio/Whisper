@@ -14,12 +14,13 @@
 #define _PARAMS_H
 
 #include "../common/defs.h"
-#include "../common/mmgr.h"
-#include "../common/queue.h"
-#include "../common/stats.h"
+#include "mmgr.h"
+#include "queue.h"
+#include "stats.h"
 #include "../common/types.h"
 #include "../common/reference.h"
-#include "../common/sa.h"
+#include "sa.h"
+#include "../common/variant.h"
 #include <string>
 #include <vector>
 #include <ostream>
@@ -57,7 +58,6 @@ struct CCmdParams
 	uint32_t min_read_len;
 	uint32_t max_read_len;
 	bool paired_reads;
-//	double max_frac_errors;
 	uint32_t max_no_errors;
 	uint32_t max_no_mappings;
 	mapping_mode_t mapping_mode;
@@ -70,6 +70,7 @@ struct CCmdParams
 	double sensitivity_factor;
 
 	double penalty_saturation_sigmas;
+	double clipping_distance_sigmas;
 	double high_confidence_sigmas;
 	double score_discretization_threshold;
 	uint32_t mask_low_quality_bases;
@@ -77,16 +78,31 @@ struct CCmdParams
 	bool hit_merging_wrt_first;
 	
 	double match_score;
-	double error_score;
 	double mismatch_score;
-	double gap_open;
-	double gap_extend;
+//	double gap_open;
+//	double gap_extend;
+	double gap_ins_open;
+	double gap_ins_extend;
+	double gap_del_open;
+	double gap_del_extend;
 	double clipping_score;
+
+	uint32_t min_approx_indel_len;
+	uint32_t max_approx_indel_len;
+	uint32_t max_approx_indel_mismatches;
+	double min_clipped_factor;
 
 	double mapq_mult;
 	double mapq_div;
 
 	bool enable_boundary_clipping;
+	bool enable_paired_clipping;
+	bool enable_var_indel_long;
+	bool enable_var_indel_short;
+	bool enable_var_snp;
+	bool enable_short_reads;
+	bool enable_mapping_indels;
+	bool enable_short_indel_refinement;
 
 	// User interface
 	uint32_t verbosity_level;
@@ -102,12 +118,11 @@ struct CCmdParams
 		max_total_memory = ((uint64_t) 16) << 30;		// 16 GB
 
 		// Mapping 
-//		max_frac_errors = 0.04;
-		max_no_errors = 4;
+		max_no_errors = 0;
 		mapping_mode = mapping_mode_t::first;
 		mapping_orientation = mapping_orientation_t::forward_reverse;
 		max_mate_distance = 1000;
-		max_mate_edit_distance_frac = 0.06f;
+		max_mate_edit_distance_frac = 0.09f;
 
 		//	max_no_mappings		= 32;		// Maximal no. of stored mappings
 		//	mapping_counter_size = 1;
@@ -116,24 +131,33 @@ struct CCmdParams
 		paired_reads = false;	// single-end reads
 
 		sensitive_mode = true;
-		sensitivity_factor = 3.0;	// !!! Na razie na sztywno x6, ale do rozwazenia czy tego nie wyciagnac jako parametr
+		sensitivity_factor = 2.5;	
 	
+		min_approx_indel_len = 3;		
+		max_approx_indel_len = 50;		
+		max_approx_indel_mismatches = (uint32_t) (max_no_errors * sensitivity_factor);
+
 		high_confidence_sigmas = 4.0;
 		penalty_saturation_sigmas = 7.0;
+		clipping_distance_sigmas = 14.0;
 		score_discretization_threshold = 0.5;
 		hit_merging_threshold = 12;
 		hit_merging_wrt_first = true;
 		
 		match_score = 1.0;
-		error_score = -4.0;
-
-		// taken from BWA
 		mismatch_score = -5.0;
-		gap_open = -6.0; 
-		gap_extend = -1.0;
-		clipping_score = -10;
-		
-		enable_boundary_clipping = false;
+//		gap_open = -6.0; 
+//		gap_extend = -1.0;
+		clipping_score = -6;
+
+		gap_ins_open = -5.0;
+		gap_ins_extend = -0.4;
+		gap_del_open = -5.0;
+		gap_del_extend = -0.4;
+
+		enable_boundary_clipping = true;
+		enable_paired_clipping = true;
+		min_clipped_factor = 1.0;
 
 		mapq_mult = 90.0;
 		mapq_div = 0.5;
@@ -150,6 +174,13 @@ struct CCmdParams
 		is_fasta = false;
 		min_read_len = 135;
 		max_read_len = 151;
+
+		enable_mapping_indels = true;
+		enable_var_indel_long = false;
+		enable_var_indel_short = false;
+		enable_var_snp = false;
+		enable_short_reads = false;
+		enable_short_indel_refinement = true;
 
 		project_name = "whisper";	
 		temp_prefix = "./whisper_temp_";
@@ -227,7 +258,6 @@ struct CParams : public CCmdParams
 		id_bits_local = 21;		// number of bits for id within a subgroup
 
 		sa_prefix_overhead = 1;			// no. of extension of bin prefix for SA queries
-		//	sa_prefix_overhead = 0;			// no. of extension of bin prefix for SA queries
 	
 		//	constant_read_len     = true;	// all reads are of the same length (so, read length is not stored for each read)
 		constant_read_len = false;	// read lengths are stored (so, reads can be of different lenths)
@@ -237,8 +267,6 @@ struct CParams : public CCmdParams
 		read_len = 10240 + 1;
 
 		read_group_id = "";
-
-//		max_no_errors = (uint32_t) (max_frac_errors * max_read_len);
 	}
 
 	CParams &operator=(const CCmdParams &cmd_params)
@@ -274,24 +302,40 @@ struct CParams : public CCmdParams
 		sensitive_mode = cmd_params.sensitive_mode;
 		sensitivity_factor = cmd_params.sensitivity_factor;
 		penalty_saturation_sigmas = cmd_params.penalty_saturation_sigmas;
+		clipping_distance_sigmas = cmd_params.clipping_distance_sigmas;
 		high_confidence_sigmas = cmd_params.high_confidence_sigmas;
 		mask_low_quality_bases = cmd_params.mask_low_quality_bases;
 		hit_merging_threshold = cmd_params.hit_merging_threshold;
 		hit_merging_wrt_first = cmd_params.hit_merging_wrt_first;
 
-		
 		enable_boundary_clipping = cmd_params.enable_boundary_clipping;
+		enable_paired_clipping = cmd_params.enable_paired_clipping;
 		score_discretization_threshold = cmd_params.score_discretization_threshold;
+		enable_short_indel_refinement = cmd_params.enable_short_indel_refinement;
 
 		match_score = cmd_params.match_score;
-		error_score = cmd_params.error_score;
 		mismatch_score = cmd_params.mismatch_score;
-		gap_open = cmd_params.gap_open;
-		gap_extend = cmd_params.gap_extend;
+//		gap_open = cmd_params.gap_open;
+//		gap_extend = cmd_params.gap_extend;
 		clipping_score = cmd_params.clipping_score;
+		gap_ins_open = cmd_params.gap_ins_open;
+		gap_ins_extend = cmd_params.gap_ins_extend;
+		gap_del_open = cmd_params.gap_del_open;
+		gap_del_extend = cmd_params.gap_del_extend;
+
+		min_approx_indel_len = cmd_params.min_approx_indel_len;
+		max_approx_indel_len = cmd_params.max_approx_indel_len;
+		max_approx_indel_mismatches = cmd_params.max_approx_indel_mismatches;
+		min_clipped_factor = cmd_params.min_clipped_factor;
 
 		mapq_mult = cmd_params.mapq_mult;
 		mapq_div = cmd_params.mapq_div;
+
+		enable_mapping_indels = cmd_params.enable_mapping_indels;
+		enable_var_indel_long = cmd_params.enable_var_indel_long;
+		enable_var_indel_short = cmd_params.enable_var_indel_short;
+		enable_var_snp = cmd_params.enable_var_snp;
+		enable_short_reads = cmd_params.enable_short_reads;
 
 		// Output format
 		gzipped_SAM_level = cmd_params.gzipped_SAM_level;
@@ -370,9 +414,17 @@ struct CObjects
 	// Pool of pointers
 	CPtrPool *ptr_pool;
 
+	// Reference
 	CReference *reference;
+	
+	// Suffix arrays
 	CSuffixArray *sa_dir;
 	CSuffixArray *sa_rc;
+
+#ifdef ENABLE_VCF_VARIANTS
+	// Variants
+	CVariantDB *variant_db;
+#endif
 
 	CRunningStats *running_stats;
 
@@ -381,21 +433,50 @@ struct CObjects
 	int64_t mem_alloc;
 	mutex mtx;
 
-	CObjects() : mem_alloc(0)
+	CObjects() : 
+		mp_fastq_blocks(nullptr),
+		mp_reads(nullptr),
+		mp_bins_read(nullptr),
+		mp_bins_write(nullptr),
+		mp_sam_parts(nullptr),
+		mp_fastq_records(nullptr),
+		mp_ext_cigar(nullptr),
+		mp_cigar(nullptr),
+		mp_cigar_bin(nullptr),
+		mp_mdz(nullptr),
+		q_file_names(nullptr),
+		q_blocks(nullptr),
+		q_bins_read(nullptr),
+		q_bins_write(nullptr),
+		q_map_res(nullptr),
+		mp_map_res(nullptr),
+		q_res_ids(nullptr),
+		q_map_reads(nullptr),
+		q_sam_blocks(nullptr),
+		mem_monitor(nullptr),
+		serial_processing(nullptr),
+		ptr_pool(nullptr),
+		reference(nullptr),
+		sa_dir(nullptr),
+		sa_rc(nullptr),
+#ifdef ENABLE_VCF_VARIANTS
+		variant_db(nullptr),
+#endif
+		running_stats(nullptr),
+		progress(nullptr),
+		mem_alloc(0)
 	{}
 
 	void IncreaseMem(string s, int64_t x)
 	{
 		unique_lock<mutex> lck(mtx);
 		mem_alloc += x;
-//		cerr << "Memory: " + to_string(x >> 20) + " MB  (" + s + ")\n";
 	}
 
 	void DecreaseMem(string s, int64_t x)
 	{
 		unique_lock<mutex> lck(mtx);
 		mem_alloc -= x;
-//		cerr << "Memory: " + to_string(x >> 20) + " MB  (" + s + ")\n";
 	}
 };
 

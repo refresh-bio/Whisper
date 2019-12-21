@@ -10,7 +10,7 @@
 // *******************************************************************************************
 
 
-#include "../common/joiner_mgr.h"
+#include "joiner_mgr.h"
 
 // ************************************************************************************
 CJoinerMgr::CJoinerMgr(CParams *params, CObjects *objects)
@@ -44,12 +44,10 @@ bool CJoinerMgr::PutFastqBlock(fastq_block_t fastq_block, bool single_end)
 
 	auto p = data.find(bin_id);
 	if(p == data.end())
-	{
 		p = data.insert(make_pair(bin_id, mapped_reads_t())).first;
-		p->second.single_end = single_end;
-	}
 
 	p->second.fastq_blocks.push_back(fastq_block);
+	p->second.single_end = single_end;
 
 	return true;
 }

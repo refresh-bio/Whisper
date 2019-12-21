@@ -12,7 +12,9 @@
 
 #pragma once
 #define MAX_VECTOR_SIZE 256
+#pragma warning (disable: 26495 26451 6385)
 #include "../libs/vectorclass.h"
+#pragma warning (default: 26495 26451 6385)
 
 #include <string>
 #include <sstream>

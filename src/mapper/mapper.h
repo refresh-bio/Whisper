@@ -19,19 +19,19 @@
 #include <algorithm>
 #include <utility>
 
-#include "../common/idstore.h"
+#include "idstore.h"
 #include "../common/utils.h"
-#include "../common/mmgr.h"
-#include "../common/queue.h"
-#include "../common/fastq_reader.h"
-#include "../common/stats.h"
-#include "../common/sa.h"
-#include "../common/joiner_mgr.h"
+#include "mmgr.h"
+#include "queue.h"
+#include "fastq_reader.h"
+#include "stats.h"
+#include "sa.h"
+#include "joiner_mgr.h"
 #include "ref_desc.h"
 #include "reads.h"
 #include "bins.h"
 #include "mapping_core.h"
-#include "../common/params.h"
+#include "params.h"
 #include "sam.h"
 #include "sam_writer.h"
 

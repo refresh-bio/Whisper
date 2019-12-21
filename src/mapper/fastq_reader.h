@@ -14,17 +14,21 @@
 #define _FASTQ_READER_H
 
 #include "../common/defs.h"
-#include "../common/mmgr.h"
-#include "../common/queue.h"
-#include "../common/idstore.h"
-#include "../common/params.h"
-#include "../common/joiner_mgr.h"
-#include "../mapper/simd_utils.h"
+#include "mmgr.h"
+#include "queue.h"
+#include "idstore.h"
+#include "params.h"
+#include "joiner_mgr.h"
+#include "simd_utils.h"
 #include <cstdio>
 #include <iostream>
 #include <string>
 
-#ifndef _DEBUG
+#ifdef _DEBUG
+#define DISABLE_COMPRESSED
+#endif
+
+#ifndef DISABLE_COMPRESSED
 #include "../libs/zlib.h"
 #include "../libs/bzlib.h"
 #endif
@@ -45,7 +49,7 @@ class CGZFile {
 	size_t in_buffer_size;
 	bool is_eof;
 
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 	z_stream stream;
 #endif
 
@@ -53,8 +57,15 @@ public:
 	CGZFile(int _buffer_size, CSerialProcessing *_serial_processing = nullptr) : 
 		serial_processing(_serial_processing), buffer_size(_buffer_size)
 	{
+#ifndef DISABLE_COMPRESSED
+		stream = z_stream();
+#endif
+
 		buffer = new uchar_t[buffer_size];
 		in = nullptr;
+		in_size = 0;
+		in_buffer_size = 0;
+		is_eof = false;
 	}
 
 	~CGZFile()
@@ -87,7 +98,7 @@ protected:
 	mode_t mode;
 
 	FILE *in;
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 	gzFile_s *in_gzip;
 	BZFILE *in_bzip2;
 	int bzerror;
@@ -105,7 +116,7 @@ protected:
 
 	CSerialProcessing *serial_processing;
 
-#ifndef _DEBUG
+#ifndef DISABLE_COMPRESSED
 	uint32_t gzip_buffer_size;
 	uint32_t bzip2_buffer_size;
 #endif

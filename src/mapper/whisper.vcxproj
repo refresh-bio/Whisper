@@ -22,34 +22,34 @@
     <ProjectGuid>{3BD33A10-0033-488E-9658-56CEF2AA319A}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>whisper</RootNamespace>
-    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>NotSet</CharacterSet>
     <UseOfMfc>Static</UseOfMfc>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>NotSet</CharacterSet>
     <UseOfMfc>Static</UseOfMfc>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>NotSet</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>NotSet</CharacterSet>
     <UseOfMfc>Static</UseOfMfc>
@@ -105,6 +105,8 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\libs;C:\Kompilatory\boost\boost_1_57_0;C:\kompilatory\boost\boost_1_54_0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <AdditionalOptions>-D_CRT_SECURE_NO_WARNINGS %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpp14</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -148,6 +150,7 @@
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
       <InlineFunctionExpansion>Default</InlineFunctionExpansion>
       <PrecompiledHeaderFile />
+      <LanguageStandard>stdcpp14</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -162,58 +165,57 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\common\defs.h" />
-    <ClInclude Include="..\common\fastq_reader.h" />
-    <ClInclude Include="..\common\idstore.h" />
-    <ClInclude Include="..\common\joiner_mgr.h" />
-    <ClInclude Include="..\common\mmgr.h" />
-    <ClInclude Include="..\common\params.h" />
-    <ClInclude Include="..\common\queue.h" />
     <ClInclude Include="..\common\reference.h" />
-    <ClInclude Include="..\common\results.h" />
-    <ClInclude Include="..\common\sa.h" />
-    <ClInclude Include="..\common\stats.h" />
     <ClInclude Include="..\common\timer.h" />
     <ClInclude Include="..\common\types.h" />
     <ClInclude Include="..\common\utils.h" />
+    <ClInclude Include="..\common\variant.h" />
     <ClInclude Include="..\libs\asmlib.h" />
     <ClInclude Include="..\libs\bzlib.h" />
     <ClInclude Include="..\libs\libdeflate.h" />
     <ClInclude Include="..\libs\zlib.h" />
     <ClInclude Include="edit_dist.h" />
+    <ClInclude Include="fastq_reader.h" />
+    <ClInclude Include="idstore.h" />
+    <ClInclude Include="indels.h" />
+    <ClInclude Include="joiner_mgr.h" />
     <ClInclude Include="LevMyers.h" />
     <ClInclude Include="LevMyers128.h" />
     <ClInclude Include="LevMyers128.hpp" />
-    <ClInclude Include="LevMyers128Native.h" />
     <ClInclude Include="LevMyers256.h" />
-    <ClInclude Include="LevMyers256.hpp" /> 
+    <ClInclude Include="LevMyers256.hpp" />
     <ClInclude Include="mapper.h" />
     <ClInclude Include="mapping_core.h" />
     <ClInclude Include="mapping_core_luts.h" />
     <ClInclude Include="mapping_evaluation.h" />
+    <ClInclude Include="mmgr.h" />
+    <ClInclude Include="params.h" />
     <ClInclude Include="probabilistic.h" />
+    <ClInclude Include="queue.h" />
     <ClInclude Include="reads.h" />
     <ClInclude Include="bins.h" />
     <ClInclude Include="ref_desc.h" />
+    <ClInclude Include="results.h" />
+    <ClInclude Include="sa.h" />
     <ClInclude Include="sam.h" />
     <ClInclude Include="sam_part.h" />
     <ClInclude Include="sam_writer.h" />
     <ClInclude Include="simd_utils.h" />
     <ClInclude Include="soft_clipping.h" />
+    <ClInclude Include="stats.h" />
+    <ClInclude Include="variant_match.h" />
     <ClInclude Include="vector_utils.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\common\fastq_reader.cpp" />
-    <ClCompile Include="..\common\idstore.cpp" />
-    <ClCompile Include="..\common\joiner_mgr.cpp" />
-    <ClCompile Include="..\common\params.cpp" />
-    <ClCompile Include="..\common\queue.cpp" />
     <ClCompile Include="..\common\reference.cpp" />
-    <ClCompile Include="..\common\results.cpp" />
-    <ClCompile Include="..\common\sa.cpp" />
-    <ClCompile Include="..\common\stats.cpp" />
     <ClCompile Include="..\common\timer.cpp" />
     <ClCompile Include="..\common\utils.cpp" />
+    <ClCompile Include="..\common\variant.cpp" />
     <ClCompile Include="..\libs\instrset_detect.cpp" />
+    <ClCompile Include="fastq_reader.cpp" />
+    <ClCompile Include="idstore.cpp" />
+    <ClCompile Include="indels.cpp" />
+    <ClCompile Include="joiner_mgr.cpp" />
     <ClCompile Include="LevMyers256_AVX.cpp">
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">AdvancedVectorExtensions</EnableEnhancedInstructionSet>
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">AdvancedVectorExtensions</EnableEnhancedInstructionSet>
@@ -226,7 +228,14 @@
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Release|x64'">AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
+    <ClCompile Include="params.cpp" />
+    <ClCompile Include="queue.cpp" />
+    <ClCompile Include="results.cpp" />
+    <ClCompile Include="sa.cpp" />
     <ClCompile Include="sam_part.cpp" />
+    <ClCompile Include="sam_variant.cpp" />
+    <ClCompile Include="stats.cpp" />
+    <ClCompile Include="variant_match.cpp" />
     <ClCompile Include="whisper.cpp" />
     <ClCompile Include="edit_dist.cpp" />
     <ClCompile Include="LevMyers128_AVX.cpp">

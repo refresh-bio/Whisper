@@ -49,4 +49,36 @@ size_t CountEOLs(uchar_t *ptr, size_t size)
 	return n_eols;
 }
 
+// ************************************************************************************
+size_t CountMismatches(uchar_t* p, uchar_t* q, size_t size)
+{
+	size_t r = 0;
+	uchar_t *p_end = p + size;
+
+	while (p != p_end)
+		r += *p++ != *q++;
+
+	return r;
+}
+
+// ************************************************************************************
+void PrefetchDecompressed(uchar_t* dest, uchar_t* src, uint32_t size, bool first_single_byte)
+{
+	if (first_single_byte)
+	{
+		*dest++ = *src++ &0x0f;
+		--size;
+	}
+
+	// For simplicity of implementation 1 more byte could be prefetched
+	if (size & 1)
+		++size;
+
+	for (; size; size -= 2)
+	{
+		*dest++ = *src >> 4;
+		*dest++ = *src++ & 0x0f;
+	}
+}
+
 // EOF

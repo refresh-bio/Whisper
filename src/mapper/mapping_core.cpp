@@ -39,7 +39,9 @@ CMappingCore::CMappingCore(CParams *params, CObjects *objects, uint32_t _stage_i
 	q_bins_write = objects->q_bins_write;
 	q_map_res = objects->q_map_res;
 
+#ifdef COLLECT_STATS
 	running_stats = objects->running_stats;
+#endif
 	stage_id = _stage_id;
 	mapping_mode = _mapping_mode;
 
@@ -54,6 +56,9 @@ CMappingCore::CMappingCore(CParams *params, CObjects *objects, uint32_t _stage_i
 	sensitive_mode = (bool)(_stage_id >> 10);
 	sensitivity_factor = params->sensitivity_factor;
 	max_no_mappings = params->max_no_mappings;
+	enable_mapping_indels = params->enable_mapping_indels;
+	max_approx_indel_len = params->max_approx_indel_len;
+	min_approx_indel_len = params->min_approx_indel_len;
 
 	no_bins = prefix_map.back() + 2;		// the last element of prefix map contains the last bin_id
 	read_id_len = BITS2BYTES(bin_total_bits);
@@ -62,13 +67,13 @@ CMappingCore::CMappingCore(CParams *params, CObjects *objects, uint32_t _stage_i
 
 	if (stage_minor < stage_major)
 	{
-		next_start_pos = params->stage_segments[stage_major][stage_minor + 1].first;
-		next_end_pos = params->stage_segments[stage_major][stage_minor + 1].second;
+		next_start_pos = params->stage_segments[stage_major][stage_minor + 1ull].first;
+		next_end_pos = params->stage_segments[stage_major][stage_minor + 1ull].second;
 	}
 	else
 	{
-		next_start_pos = params->stage_segments[stage_major + 1][0].first;
-		next_end_pos = params->stage_segments[stage_major + 1][0].second;
+		next_start_pos = params->stage_segments[stage_major + 1ull][0].first;
+		next_end_pos = params->stage_segments[stage_major + 1ull][0].second;
 	}
 	params_aux_ptr = params;
 
@@ -90,6 +95,15 @@ CMappingCore::CMappingCore(CParams *params, CObjects *objects, uint32_t _stage_i
 	max_read_len = params->max_read_len;
 	min_read_len = params->min_read_len;
 
+	mismatch_score = params->mismatch_score;
+//	gap_open	   = params->gap_open;
+//	gap_extend     = params->gap_extend;
+	gap_ins_open = params->gap_ins_open;
+	gap_ins_extend = params->gap_ins_extend;
+	gap_del_open = params->gap_del_open;
+	gap_del_extend = params->gap_del_extend;
+	clipping_score = params->clipping_score;
+	
 	old_sequence = new uchar_t[max_read_len / 2 + max_read_len % 2];
 	old_sequence_sft = new uchar_t[max_read_len / 2 + 1];
 
@@ -133,9 +147,9 @@ CMappingCore::CMappingCore(CParams *params, CObjects *objects, uint32_t _stage_i
 	progress = objects->progress;
 
 #ifdef USE_128b_SSE_CF_AND_DP
-	prev_dp_ptr = new uint32_t[max_read_len + 1 + 2 * stage_major + 2];
-	curr_dp_ptr = new uint32_t[max_read_len + 1 + 2 * stage_major + 2];
-	genome_prefetch = new uchar_t[max_read_len + 1 + 2 * stage_major + 2];
+	prev_dp_ptr = new uint32_t[max_read_len + 1 + 2ull * stage_major + 2];
+	curr_dp_ptr = new uint32_t[max_read_len + 1 + 2ull * stage_major + 2];
+	genome_prefetch = new uchar_t[max_read_len + 1 + 2ull * stage_major + 2];
 
 	edit_dist = new CEditDist((uint32_t)max_read_len, (uint32_t)max_read_len + 2 * (uint32_t)(stage_major*params->sensitivity_factor) + 2,
 		(uint32_t)(stage_major*params->sensitivity_factor));
@@ -170,6 +184,12 @@ CMappingCore::CMappingCore(CParams *params, CObjects *objects, uint32_t _stage_i
 	levMyers64->setReference(reference->GetData(), sa_dir->GetRefSize(), start_pos);
 	levMyers128->setReference(reference->GetData(), sa_dir->GetRefSize(), start_pos);
 	levMyers256->setReference(reference->GetData(), sa_dir->GetRefSize(), start_pos);
+
+	int max_text_len = 16384;
+	indel_matching_dir = new CIndelMatching(params);
+	indel_matching_dir->SetReference(reference->GetData(), 0, 0);
+	indel_matching_rc = new CIndelMatching(params);
+	indel_matching_rc->SetReference(reference->GetData(), 0, 0);
 
 	CF_array_dir_gen = new uint32_t[1];
 	CF_array_rc_gen = new uint32_t[1];
@@ -229,6 +249,9 @@ CMappingCore::~CMappingCore()
 	delete levMyers256;
 	delete levMyers128;
 	delete levMyers64;
+
+	delete indel_matching_dir;
+	delete indel_matching_rc;
 #endif
 }
 
@@ -262,14 +285,20 @@ void CMappingCore::operator()()
 				adjust_group_sizes(bin);
 
 			reads_deliverer->SetBin(bin);
-			reads_deliverer->Start();
+
 			if (bin.bin_id < no_bins - 1)
+			{
+				reads_deliverer->Start(false);
 				if ((stage_major == 1) && !stage_minor)
 					process_reads_init_stage(bin);
 				else
 					process_reads(bin);
+			}
 			else
+			{
+				reads_deliverer->Start(true);
 				copy_reads(bin);		// do not map reads with Ns in prefix
+			}
 
 			delete[] bin.data;
 			mem_monitor->Decrease(bin.size + bin.count * sizeof(uint32_t));
@@ -283,8 +312,10 @@ void CMappingCore::operator()()
 			bin_watch.StopTimer();
 
 			uint32_t stat_id = STAT_BIN_TIMES + stage_id * 1000 + bin.bin_id;
+#ifdef COLLECT_STATS
 			running_stats->Register(stat_id, "Bin times " + StageDesc(stage_id) + " : " + prefixes[bin.bin_id] + " : ", running_stats_t::totals);
 			running_stats->AddTotals(stat_id, bin_watch.GetElapsedTime());
+#endif
 		}
 	}
 
@@ -295,16 +326,21 @@ void CMappingCore::operator()()
 
 	thr_watch.StopTimer();
 
+#ifdef COLLECT_STATS
 	running_stats->AddValues(STAT_TIME_THR_MAPPING_CORE_BASE + stage_id, thr_watch.GetElapsedTime());
+#endif
 }
 
 //**********************************************************************************************************
 //
 //**********************************************************************************************************
-inline uint32_t CMappingCore::get_next_bin_id(uchar_t* data)
+inline uint32_t CMappingCore::get_next_bin_id(uchar_t* data, uint32_t size)
 {
 	uint32_t bin_id = 0;
 	uint32_t i;
+
+	if (size < next_end_pos)
+		return no_bins - 1;
 
 	// Look for Ns
 	i = next_start_pos;
@@ -352,6 +388,7 @@ inline uint32_t CMappingCore::get_read_prefix(uchar_t* data, uint32_t size)
 //**********************************************************************************************************
 void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 {
+#ifdef COLLECT_STATS
 	int64_t dir_exactMatchCounter = 0;
 	int64_t rc_exactMatchCounter = 0;
 	int64_t dir_and_rc_exactMatchCounter = 0;
@@ -364,6 +401,9 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 	no_of_CF_discarded = 0;
 	no_of_CF_accepted_in_malicious_group = 0;
 	no_of_CF_discarded_in_malicious_group = 0;
+	no_of_indel_mapping_found = 0;
+	no_of_indel_mapping_tests = 0;
+#endif
 
 	cmp_lut_ptr = &cmp_lut[0];
 
@@ -429,10 +469,22 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 																	  //size - a size of a read in characters
 	{
 		// Remove too short reads
-		if (size < min_read_len)
+
+//		if (size < min_read_len)
+//			continue;
+		if (size < prefix_len + sa_prefix_overhead)		// Remove extremly short reads
 			continue;
 
-		if (compare_str_to_str(data, min_read_len, old_data))
+
+/*		if (size < shortest_min_read_len)				// Remove short reads
+			continue;
+			*/
+
+		bool is_short_read = size < min_read_len;
+
+		// For technical reasons too short reads are not looked for exact matches here
+		// The exact matches for them will be found in the approx stages
+		if (!is_short_read && compare_str_to_str(data, min_read_len, old_data))
 		{
 			basic_data_part_is_new = false;	//along with min_read_len data and old data are the same, 
 											//but the rest should be checked
@@ -457,12 +509,12 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 			basic_data_part_is_new = true; //along with min_read_len data and old data are different
 			newly_read_data = true;
 		}
-		
+
 		if (newly_read_data)
 		{
-			//read is new
+			// Read is new
 			// Compute bin id for next substage
-			bin_id = get_next_bin_id(data);
+			bin_id = get_next_bin_id(data, size);
 
 			dirExact_match_found = false;
 			rcExact_match_found = false;
@@ -471,7 +523,6 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 			dir_match_positions.clear();
 			rc_match_positions.clear();
 
-			//			collected_mappings.clear();
 			collected_mappings.Clear(max_no_mappings);
 
 			// Compare (prefix_len+sa_prefix_overhead)-symbols long prefix of a read with a previous read
@@ -487,16 +538,12 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 				sa_rc->ReleaseSAPart(sa_rc_part);
 
 				sa_dir->GetSAPart(cur_read_prefix, prefix_len + sa_prefix_overhead, sa_dir_part, sa_dir_size);
-//				sa_dir_cur_index = 0;
 				sa_dir_start_index = 0;
-//				start_index = 0;
 				sa_dir_last_index = 0;
-//				last_index = 0;
 				sa_dir_start_index_for_exact_match = 0;
 				sa_dir_last_index_for_exact_match = 0;
 
 				sa_rc->GetSAPart(cur_read_prefix, prefix_len + sa_prefix_overhead, sa_rc_part, sa_rc_size);
-//				sa_rc_cur_index = 0;
 				sa_rc_start_index = 0;
 				sa_rc_last_index = 0;
 				sa_rc_start_index_for_exact_match = 0;
@@ -517,50 +564,49 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 			reverse_read(data, size, &rc_data, &rc_data_sft, rc_lut);
 
 			//************************ Mapping *****************************
-
-			if (mapping_mode == mapping_mode_t::first)
+			if (!is_short_read && mapping_mode == mapping_mode_t::first)
 			{
 				dirExact_match_found = findExactMatch_diff_len_version(data, data_sft, size, basic_data_part_is_new, &sa_dir_last_index_for_exact_match, &sa_dir_start_index_for_exact_match, sa_dir_part, sa_dir_size, true);
 				rcExact_match_found = findExactMatch_diff_len_version(rc_data, rc_data_sft, size, basic_data_part_is_new, &sa_rc_last_index_for_exact_match, &sa_rc_start_index_for_exact_match, sa_rc_part, sa_rc_size, false);
 			}
 		}   //end_if(newly_read_data)
 
-			//************************ After mapping ***************************
+
+		//************************ After mapping ***************************
 		if (dirExact_match_found || rcExact_match_found)
 		{
 			best_error = 0;
+#ifdef COLLECT_STATS
 			dir_or_rc_exactMatchCounter++;
+#endif
 
 			if (dirExact_match_found)
 			{
+#ifdef COLLECT_STATS
 				dir_exactMatchCounter++;
+#endif
 				for (uint32_t i = 0; i < dir_match_positions.size(); i++)
-					//					results_collector->Push(id, dir_match_positions[i].first, genome_t::direct, 0);
-									//					collected_mappings.emplace_back(make_tuple(id, dir_match_positions[i].first, genome_t::direct, 0));
-					collected_mappings.Push(dir_match_positions[i].first, genome_t::direct, 0);
+					collected_mappings.Push(dir_match_positions[i]);
 			}
 			if (rcExact_match_found)
 			{
+#ifdef COLLECT_STATS
 				rc_exactMatchCounter++;
+#endif
 				for (uint32_t i = 0; i < rc_match_positions.size(); i++)
-//					results_collector->Push(id, rc_match_positions[i].first, genome_t::rev_comp, 0);
-				//					collected_mappings.emplace_back(make_tuple(id, rc_match_positions[i].first, genome_t::rev_comp, 0));
-					collected_mappings.Push(rc_match_positions[i].first, genome_t::rev_comp, 0);
+					collected_mappings.Push(rc_match_positions[i]);
 			}
 
+#ifdef COLLECT_STATS
 			if (dirExact_match_found && rcExact_match_found)
 				dir_and_rc_exactMatchCounter++;
 
-			/*			if(collected_mappings.size() > max_no_mappings)
-			random_shuffle(collected_mappings.begin(), collected_mappings.end());
-			for (auto &x : collected_mappings)
-			results_collector->Push(get<0>(x), get<1>(x), get<2>(x), get<3>(x));
-			collected_mappings.clear();*/
+#endif
 
 			while (!collected_mappings.Empty())
 			{
-				uint64_t x = collected_mappings.PopUnsorted();
-				results_collector->Push(id, collected_mappings.DecodePos(x), collected_mappings.DecodeDir(x), collected_mappings.DecodeNoErrors(x));
+				auto x = collected_mappings.PopUnsorted();
+				results_collector->Push(id, x);
 			}
 		}//end_if(dirExact_match_found || rcExact_match_found)
 
@@ -571,20 +617,30 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 		{
 			if (newly_read_data)
 			{
-				if (!compare_str_to_str(data, predef_match_length, old_matching_part))	//mamy pierwsze wystąpienie matching_part
+				if (is_short_read || !compare_str_to_str(data, predef_match_length, old_matching_part))	//mamy pierwsze wystąpienie matching_part
 				{
-					string_copy(old_matching_part, data, predef_match_length);
+					string_copy(old_matching_part, data, predef_match_length);		// !!! SD tu prawdopodobnie za dużo się kopiuje dla short_read, ale to i tak później jest ignorowane
 					matching_part_is_new = true;
 				}
 				else
 					matching_part_is_new = false;
 
+				if(is_short_read)		// to force reseting some internal variables for SA browsing
+					old_matching_part[0] = 0xff;
+
 				//************************************************************
 				// Mapping
 				//************************************************************
-
-				dir_mismatch = findMismatches_dir_and_rc(data, data_sft, size, matching_part_is_new, sa_dir_part, sa_dir_size, &sa_dir_last_index, &sa_dir_start_index, 1, &dir_inside_malicious_group, &dir_aux_struct_valid, stage_major);
-				rc_mismatch = findMismatches_dir_and_rc(rc_data, rc_data_sft, size, matching_part_is_new, sa_rc_part, sa_rc_size, &sa_rc_last_index, &sa_rc_start_index, 0, &rc_inside_malicious_group, &rc_aux_struct_valid, stage_major);
+				if (size >= predef_match_length)
+				{
+					dir_mismatch = findMismatches_dir_and_rc(data, data_sft, size, matching_part_is_new, sa_dir_part, sa_dir_size, &sa_dir_last_index, &sa_dir_start_index, 1, &dir_inside_malicious_group, &dir_aux_struct_valid, stage_major);
+					rc_mismatch = findMismatches_dir_and_rc(rc_data, rc_data_sft, size, matching_part_is_new, sa_rc_part, sa_rc_size, &sa_rc_last_index, &sa_rc_start_index, 0, &rc_inside_malicious_group, &rc_aux_struct_valid, stage_major);
+				}
+				else
+				{
+					dir_mismatch = 255;
+					rc_mismatch = 255;
+				}
 			}
 
 			//************************************************************
@@ -594,39 +650,30 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 			{
 				if (dir_mismatch <= 1)
 				{
+#ifdef COLLECT_STATS
 					dir_oneMismatchCounter++;
+#endif
 					for (uint32_t i = 0; i < dir_match_positions.size(); i++)
-						//						results_collector->Push(id, dir_match_positions[i].first, genome_t::direct, stage_major, 0);
-						//						results_collector->Push(id, dir_match_positions[i].first, genome_t::direct, stage_major);
-//						results_collector->Push(id, dir_match_positions[i].first, genome_t::direct, dir_mismatch);
-					//						collected_mappings.emplace_back(make_tuple(id, dir_match_positions[i].first, genome_t::direct, dir_mismatch));
-						collected_mappings.Push(dir_match_positions[i].first, genome_t::direct, dir_mismatch);
+						collected_mappings.Push(dir_match_positions[i]);
 				}
 
 				if (rc_mismatch <= 1)
 				{
+#ifdef COLLECT_STATS
 					rc_oneMismatchCounter++;
+#endif
 					for (uint32_t i = 0; i < rc_match_positions.size(); i++)
-						//						results_collector->Push(id, rc_match_positions[i].first, genome_t::rev_comp, stage_major, 0);
-						//						results_collector->Push(id, rc_match_positions[i].first, genome_t::rev_comp, stage_major);
-//						results_collector->Push(id, rc_match_positions[i].first, genome_t::rev_comp, rc_mismatch);
-					//						collected_mappings.emplace_back(make_tuple(id, rc_match_positions[i].first, genome_t::rev_comp, rc_mismatch));
-						collected_mappings.Push(rc_match_positions[i].first, genome_t::rev_comp, rc_mismatch);
+						collected_mappings.Push(rc_match_positions[i]);
 				}
 				best_error = MIN(dir_mismatch, rc_mismatch);
 
-				/*				if (collected_mappings.size() > max_no_mappings)
-				random_shuffle(collected_mappings.begin(), collected_mappings.end());
-				for (auto &x : collected_mappings)
-				results_collector->Push(get<0>(x), get<1>(x), get<2>(x), get<3>(x));
-				collected_mappings.clear();*/
 				while (!collected_mappings.Empty())
 				{
-					uint64_t x = collected_mappings.PopUnsorted();
-					results_collector->Push(id, collected_mappings.DecodePos(x), collected_mappings.DecodeDir(x), collected_mappings.DecodeNoErrors(x));
+					auto x = collected_mappings.PopUnsorted();
+					results_collector->Push(id, x);
 				}
 			}
-		} //end else - nither dirExact_match_found nor rcExact_match_found
+		} //end else - neither dirExact_match_found nor rcExact_match_found
 
   	    // Push read for next substage
 		bool pass_read = false;
@@ -648,6 +695,7 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 		}
 	}
 
+#ifdef COLLECT_STATS
 	running_stats->AddTotals(STAT_DIR_EXACT_MATCH, dir_exactMatchCounter);
 	running_stats->AddTotals(STAT_RC_EXACT_MATCH, rc_exactMatchCounter);
 	running_stats->AddTotals(STAT_DIR_AND_RC_EXACT_MATCH, dir_and_rc_exactMatchCounter);
@@ -664,6 +712,9 @@ void CMappingCore::process_reads_init_stage(reads_bin_t bin)
 	running_stats->AddTotals(STAT_CF_DISCARDED_IN_MALICIOUS_GROUPS + stage_id, no_of_CF_discarded_in_malicious_group);
 
 	running_stats->AddTotals(STAT_LEV_POSITIVE + stage_id, no_of_Lev_positive);
+	running_stats->AddTotals(STAT_INDEL_MAPPING_FOUND + stage_id, no_of_indel_mapping_found);
+	running_stats->AddTotals(STAT_INDEL_MAPPING_TESTS + stage_id, no_of_indel_mapping_tests);
+#endif
 
 	sa_dir->ReleaseSAPart(sa_dir_part);
 	sa_rc->ReleaseSAPart(sa_rc_part);
@@ -687,11 +738,14 @@ void CMappingCore::copy_reads(reads_bin_t bin)
 
 	while (reads_deliverer->Pop(id, data, data_sft, size, best_error))
 	{
-		if (size < min_read_len)		// Remove too short reads
+
+//		if (size < min_read_len)		// Remove too short reads
+//			continue;
+		if (size < prefix_len + sa_prefix_overhead)		// Remove extremly short reads
 			continue;
 
 		// Compute bid id for next substage
-		uint32_t bin_id = get_next_bin_id(data);
+		uint32_t bin_id = get_next_bin_id(data, size);
 
 		// Push read for next substage
 		bool pass_read = false;
@@ -718,7 +772,9 @@ void CMappingCore::copy_reads(reads_bin_t bin)
 		++n_reads;
 	}
 
+#ifdef COLLECT_STATS
 	running_stats->AddTotals(STAT_SELECTED_READS_BASE + stage_id, no_of_reads);
+#endif
 }
 
 //**********************************************************************************************************
@@ -731,8 +787,10 @@ void CMappingCore::complete()
 //**********************************************************************************************************
 void CMappingCore::process_reads(reads_bin_t bin)
 {
+#ifdef COLLECT_STATS
 	int64_t dir_acceptedMismatchCounter = 0;
 	int64_t rc_acceptedMismatchCounter = 0;
+#endif
 
 	cmp_lut_ptr = &cmp_lut[0];
 
@@ -749,14 +807,15 @@ void CMappingCore::process_reads(reads_bin_t bin)
 	uint32_t prev_read_prefix = ~((uint32_t)0);
 	uint32_t *sa_dir_part = nullptr;		// just to make the following code simpler (always delete this array, no ifs necessary)
 	uint32_t *sa_rc_part = nullptr;
-	uint32_t sa_dir_size, sa_rc_size;
+	uint32_t sa_dir_size = 0;
+	uint32_t sa_rc_size = 0;
 
 	uint32_t sa_dir_last_index = 0;					// the last index of suffixes' group with an appropriate matching part
 	uint32_t sa_dir_start_index = 0;				// the first index of suffixes' group with an appropriate matching part
 	uint32_t sa_rc_last_index = 0;					// the last index of suffixes' group with an appropriate matching part
 	uint32_t sa_rc_start_index = 0;					// the first index of suffixes' group with an appropriate matching part
 
-	uint32_t bin_id;
+	uint32_t bin_id = 0;
 
 	uint32_t dir_mismatch = error_unknown;
 	uint32_t rc_mismatch = error_unknown;
@@ -782,167 +841,179 @@ void CMappingCore::process_reads(reads_bin_t bin)
 	identical_sequences_dir.shrink_to_fit();
 	identical_sequences_rc.shrink_to_fit();
 
+#ifdef COLLECT_STATS
 	no_of_CF_accepted = 0;
 	no_of_CF_discarded = 0;
 	no_of_CF_accepted_in_malicious_group = 0;
 	no_of_CF_discarded_in_malicious_group = 0;
 	no_of_Lev_positive = 0;
+	no_of_indel_mapping_found = 0;
+	no_of_indel_mapping_tests = 0;
+#endif
 
 	while (reads_deliverer->Pop(id, data, data_sft, size, best_error))//id number was assigned internally
 																	  //data_sft - same data as in "data", but shifted by 4 bits
 																	  //size - a size of a read in characters
 	{
-		if (size == old_data_size)
+		if (size >= end_pos)		// try mapping only reads covering current region
 		{
-			if (compare_str_to_str(data, size, old_data))
-				newly_read_data = false;
+			if (size == old_data_size)
+			{
+				if (compare_str_to_str(data, size, old_data))
+					newly_read_data = false;
+				else
+					newly_read_data = true;
+			}
 			else
 				newly_read_data = true;
-		}
-		else
-			newly_read_data = true;
 
-		if (newly_read_data)
-		{
-			// read is new
-			// Compute bin id for next substage
-			bin_id = get_next_bin_id(data);
-
-			old_data = data;
-			old_data_size = size;
-			dir_match_positions.clear();
-			rc_match_positions.clear();
-
-			collected_mappings.Clear(max_no_mappings);
-
-			// Compare (prefix_len+sa_prefix_overhead)-symbols long prefix of read with previous read
-			uint32_t cur_read_prefix = get_read_prefix(data, prefix_len + sa_prefix_overhead);
-			//prefix_len - the number of characters that implies a division into bins
-
-			if (cur_read_prefix != prev_read_prefix)
+			if (sensitive_mode && enable_mapping_indels)
 			{
-				// Read SA part if necessary
-				if (verbosity_level > 1)
-					cerr << "Loading SA: " << hex << cur_read_prefix << dec << "   (prefix_len: " << prefix_len << ")\n";
+				indel_matching_dir->Preprocess(data, size, genome_t::direct);
+				indel_matching_rc->Preprocess(data, size, genome_t::rev_comp);
+			}
 
-				sa_dir->ReleaseSAPart(sa_dir_part);
-				sa_rc->ReleaseSAPart(sa_rc_part);
+			if (newly_read_data)
+			{
+				// read is new
+				// Compute bin id for next substage
+				bin_id = get_next_bin_id(data, size);
 
-				sa_dir->GetSAPart(cur_read_prefix, prefix_len + sa_prefix_overhead, sa_dir_part, sa_dir_size);
-//				sa_dir_cur_index = 0;
-				sa_dir_start_index = 0;
-				sa_dir_last_index = 0;
+				old_data = data;
+				old_data_size = size;
+				dir_match_positions.clear();
+				rc_match_positions.clear();
 
-				sa_rc->GetSAPart(cur_read_prefix, prefix_len + sa_prefix_overhead, sa_rc_part, sa_rc_size);
-//				sa_rc_cur_index = 0;
-				sa_rc_start_index = 0;
-				sa_rc_last_index = 0;
+				collected_mappings.Clear(max_no_mappings);
+
+				// Compare (prefix_len+sa_prefix_overhead)-symbols long prefix of read with previous read
+				uint32_t cur_read_prefix = get_read_prefix(data, prefix_len + sa_prefix_overhead);
+				//prefix_len - the number of characters that implies a division into bins
+
+				if (cur_read_prefix != prev_read_prefix)
+				{
+					// Read SA part if necessary
+					if (verbosity_level > 1)
+						cerr << "Loading SA: " << hex << cur_read_prefix << dec << "   (prefix_len: " << prefix_len << ")\n";
+
+					sa_dir->ReleaseSAPart(sa_dir_part);
+					sa_rc->ReleaseSAPart(sa_rc_part);
+
+					sa_dir->GetSAPart(cur_read_prefix, prefix_len + sa_prefix_overhead, sa_dir_part, sa_dir_size);
+					//				sa_dir_cur_index = 0;
+					sa_dir_start_index = 0;
+					sa_dir_last_index = 0;
+
+					sa_rc->GetSAPart(cur_read_prefix, prefix_len + sa_prefix_overhead, sa_rc_part, sa_rc_size);
+					//				sa_rc_cur_index = 0;
+					sa_rc_start_index = 0;
+					sa_rc_last_index = 0;
 
 #ifdef USE_128b_SSE_CF_AND_DP
-				CF_vector_128b_SSE_dir_gen.clear();
-				CF_vector_128b_SSE_dir_gen.resize(sa_dir_size, 0);
+					CF_vector_128b_SSE_dir_gen.clear();
+					CF_vector_128b_SSE_dir_gen.resize(sa_dir_size, 0);
 
-				CF_vector_128b_SSE_rc_gen.clear();
-				CF_vector_128b_SSE_rc_gen.resize(sa_rc_size, 0);
+					CF_vector_128b_SSE_rc_gen.clear();
+					CF_vector_128b_SSE_rc_gen.resize(sa_rc_size, 0);
 #endif
-				prev_read_prefix = cur_read_prefix;
-				if (verbosity_level > 2)
-					cerr << "Loaded SA : " << hex << cur_read_prefix << dec << "   dir_size: " << sa_dir_size << "   rc_size: " << sa_rc_size << "\n";
+					prev_read_prefix = cur_read_prefix;
+					if (verbosity_level > 2)
+						cerr << "Loaded SA : " << hex << cur_read_prefix << dec << "   dir_size: " << sa_dir_size << "   rc_size: " << sa_rc_size << "\n";
 
-			} //end_if(cur_read_prefix != prev_read_prefix)
+				} //end_if(cur_read_prefix != prev_read_prefix)
 
-			reverse_read(data, size, &rc_data, &rc_data_sft, rc_lut);
+				reverse_read(data, size, &rc_data, &rc_data_sft, rc_lut);
 
-			//-----------------------------------------------------------------------------------------------
-			//------- check if "matching part" of just readed data is new -----------------------------------
-			//-----------------------------------------------------------------------------------------------
-			switch (CUR_OFFSET & 1)
-			{
-			case 0:			//even CUR_OFFSET
-				if (!compare_str_to_str(data + CUR_OFFSET / 2, predef_match_length, old_matching_part))	//old_maching_part does not suit just readed data
+				//-----------------------------------------------------------------------------------------------
+				//------- check if "matching part" of just readed data is new -----------------------------------
+				//-----------------------------------------------------------------------------------------------
+				switch (CUR_OFFSET & 1)
 				{
-					string_copy(old_matching_part, data + CUR_OFFSET / 2, predef_match_length);
-					matching_part_is_new = true;
-				}
-				else
-					matching_part_is_new = false;
-				break;
-			case 1:			//odd CUR_OFFSET
-				if (!compare_str_to_str(data_sft + CUR_OFFSET / 2 + 1, predef_match_length, old_matching_part))	//old_maching_part does not suit just readed data
+				case 0:			//even CUR_OFFSET
+					if (!compare_str_to_str(data + CUR_OFFSET / 2, predef_match_length, old_matching_part))	//old_maching_part does not suit just readed data
+					{
+						string_copy(old_matching_part, data + CUR_OFFSET / 2, predef_match_length);
+						matching_part_is_new = true;
+					}
+					else
+						matching_part_is_new = false;
+					break;
+				case 1:			//odd CUR_OFFSET
+					if (!compare_str_to_str(data_sft + CUR_OFFSET / 2 + 1, predef_match_length, old_matching_part))	//old_maching_part does not suit just readed data
+					{
+						string_copy(old_matching_part, data_sft + CUR_OFFSET / 2 + 1, predef_match_length);
+						matching_part_is_new = true;
+					}
+					else
+						matching_part_is_new = false;
+					break;
+				} //end_of_switch
+
+				  //-----------------------------------------------------------------------------------------------
+				  // map R to dirGenome and rcGenome with at most min(stage_major, best_error) mismatches
+				  //-----------------------------------------------------------------------------------------------
+
+				if (mapping_mode == mapping_mode_t::first)
 				{
-					string_copy(old_matching_part, data_sft + CUR_OFFSET / 2 + 1, predef_match_length);
-					matching_part_is_new = true;
+					if (sensitive_mode)
+						max_mismatches = stage_major * sensitivity_factor;
+					else
+						max_mismatches = stage_major;
 				}
-				else
-					matching_part_is_new = false;
-				break;
-			} //end_of_switch
+				else if (mapping_mode == mapping_mode_t::second)
+					max_mismatches = (uint32_t)MIN(stage_major * (sensitive_mode ? sensitivity_factor : 1.0), best_error + 1ll);
+				else if (mapping_mode == mapping_mode_t::all)
+					max_mismatches = (uint32_t)(stage_major * (sensitive_mode ? sensitivity_factor : 1.0));
 
-			  //-----------------------------------------------------------------------------------------------
-			  // map R to dirGenome and rcGenome with at most min(stage_major, best_error) mismatches
-			  //-----------------------------------------------------------------------------------------------
+				dir_mismatch = findMismatches_dir_and_rc(data, data_sft, size, matching_part_is_new, sa_dir_part, sa_dir_size, &sa_dir_last_index, &sa_dir_start_index, 1, &dir_inside_malicious_group, &dir_aux_struct_valid, max_mismatches);
+				rc_mismatch = findMismatches_dir_and_rc(rc_data, rc_data_sft, size, matching_part_is_new, sa_rc_part, sa_rc_size, &sa_rc_last_index, &sa_rc_start_index, 0, &rc_inside_malicious_group, &rc_aux_struct_valid, max_mismatches);
 
-			if (mapping_mode == mapping_mode_t::first)
-				max_mismatches = (uint32_t)MIN(stage_major * (sensitive_mode ? sensitivity_factor : 1.0), best_error);
-			if (mapping_mode == mapping_mode_t::second)
-				max_mismatches = (uint32_t)MIN(stage_major * (sensitive_mode ? sensitivity_factor : 1.0), best_error + 1);
-			else if (mapping_mode == mapping_mode_t::all)
-				max_mismatches = (uint32_t)(stage_major * (sensitive_mode ? sensitivity_factor : 1.0));
+			} //end_if(newly_read_data)
+			  //---------------------------------------------------------------------------------------------
 
-			dir_mismatch = findMismatches_dir_and_rc(data, data_sft, size, matching_part_is_new, sa_dir_part, sa_dir_size, &sa_dir_last_index, &sa_dir_start_index, 1, &dir_inside_malicious_group, &dir_aux_struct_valid, max_mismatches);
-			rc_mismatch = findMismatches_dir_and_rc(rc_data, rc_data_sft, size, matching_part_is_new, sa_rc_part, sa_rc_size, &sa_rc_last_index, &sa_rc_start_index, 0, &rc_inside_malicious_group, &rc_aux_struct_valid, max_mismatches);
-
-		} //end_if(newly_read_data)
-		  //---------------------------------------------------------------------------------------------
-
-		if ((dir_mismatch <= max_mismatches) || (rc_mismatch <= max_mismatches))
-		{
-			if (dir_mismatch <= max_mismatches)
+			if ((dir_mismatch <= max_mismatches) || (rc_mismatch <= max_mismatches))
 			{
-				dir_acceptedMismatchCounter++;
-				for (uint32_t i = 0; i < dir_match_positions.size(); i++)
-//					results_collector->Push(id, dir_match_positions[i].first, genome_t::direct, dir_match_positions[i].second);
-				//					collected_mappings.emplace_back(make_tuple(id, dir_match_positions[i].first, genome_t::direct, dir_match_positions[i].second));
-					collected_mappings.Push(dir_match_positions[i].first, genome_t::direct, dir_match_positions[i].second);
-			}
+				if (dir_mismatch <= max_mismatches)
+				{
+#ifdef COLLECT_STATS
+					dir_acceptedMismatchCounter++;
+#endif
+					for (uint32_t i = 0; i < dir_match_positions.size(); i++)
+						collected_mappings.Push(dir_match_positions[i]);
+				}
 
-			if (rc_mismatch <= max_mismatches)
-			{
-				rc_acceptedMismatchCounter++;
-				for (uint32_t i = 0; i < rc_match_positions.size(); i++)
-//					results_collector->Push(id, rc_match_positions[i].first, genome_t::rev_comp, rc_match_positions[i].second);
-				//						collected_mappings.emplace_back(make_tuple(id, rc_match_positions[i].first, genome_t::rev_comp, rc_match_positions[i].second));
-					collected_mappings.Push(rc_match_positions[i].first, genome_t::rev_comp, rc_match_positions[i].second);
-			}
+				if (rc_mismatch <= max_mismatches)
+				{
+#ifdef COLLECT_STATS
+					rc_acceptedMismatchCounter++;
+#endif
+					for (uint32_t i = 0; i < rc_match_positions.size(); i++)
+						collected_mappings.Push(rc_match_positions[i]);
+				}
 
-			/*			 if (collected_mappings.size() > max_no_mappings)
-			random_shuffle(collected_mappings.begin(), collected_mappings.end());
-			for (auto &x : collected_mappings)
-			results_collector->Push(get<0>(x), get<1>(x), get<2>(x), get<3>(x));
-			collected_mappings.clear();*/
+				while (!collected_mappings.Empty())
+				{
+					auto x = collected_mappings.PopUnsorted();
+					results_collector->Push(id, x);
+				}
 
-			while (!collected_mappings.Empty())
-			{
-				uint64_t x = collected_mappings.PopUnsorted();
-				results_collector->Push(id, collected_mappings.DecodePos(x), collected_mappings.DecodeDir(x), collected_mappings.DecodeNoErrors(x));
-			}
-
-			if (mapping_mode == mapping_mode_t::first)
-			{
-				uint32_t tmp_best_error = MIN(dir_mismatch, rc_mismatch);
-				best_error = MIN(best_error, tmp_best_error);
-			}
-			else if (mapping_mode == mapping_mode_t::second)
-			{
-				uint32_t tmp_best_error = MIN(dir_mismatch, rc_mismatch);
-				best_error = MIN(best_error, tmp_best_error);
-			}
-			else if (mapping_mode == mapping_mode_t::all)
-			{
-				uint32_t tmp_best_error = MIN(dir_mismatch, rc_mismatch);
-				best_error = MIN(best_error, tmp_best_error);
-			}
-		}  //end if((dir_mismatch <= stage_major) || (rc_mismatch <= stage_major))
+				if (mapping_mode == mapping_mode_t::first)
+				{
+					uint32_t tmp_best_error = MIN(dir_mismatch, rc_mismatch);
+					best_error = MIN(best_error, tmp_best_error);
+				}
+				else if (mapping_mode == mapping_mode_t::second)
+				{
+					uint32_t tmp_best_error = MIN(dir_mismatch, rc_mismatch);
+					best_error = MIN(best_error, tmp_best_error);
+				}
+				else if (mapping_mode == mapping_mode_t::all)
+				{
+					uint32_t tmp_best_error = MIN(dir_mismatch, rc_mismatch);
+					best_error = MIN(best_error, tmp_best_error);
+				}
+			}  //end if((dir_mismatch <= stage_major) || (rc_mismatch <= stage_major))
+		}
 
 		bool pass_read = false;
 
@@ -966,6 +1037,7 @@ void CMappingCore::process_reads(reads_bin_t bin)
 		}
 	}	//end while
 
+#ifdef COLLECT_STATS
 	running_stats->AddTotals(STAT_MISMATCHES_TO_DIR_BASE + stage_id, dir_acceptedMismatchCounter);
 	running_stats->AddTotals(STAT_MISMATCHES_TO_RC_BASE + stage_id, rc_acceptedMismatchCounter);
 	running_stats->AddTotals(STAT_SELECTED_READS_BASE + stage_id, no_of_reads);
@@ -976,7 +1048,10 @@ void CMappingCore::process_reads(reads_bin_t bin)
 	running_stats->AddTotals(STAT_CF_DISCARDED_IN_MALICIOUS_GROUPS + stage_id, no_of_CF_discarded_in_malicious_group);
 
 	running_stats->AddTotals(STAT_LEV_POSITIVE + stage_id, no_of_Lev_positive);
+	running_stats->AddTotals(STAT_INDEL_MAPPING_FOUND + stage_id, no_of_indel_mapping_found);
+	running_stats->AddTotals(STAT_INDEL_MAPPING_TESTS + stage_id, no_of_indel_mapping_tests);
 	//	running_stats->AddTotals(STAT_LEV_NEGATIVE+stage_id, no_of_Lev_negative);
+#endif
 
 	sa_dir->ReleaseSAPart(sa_dir_part);
 	sa_rc->ReleaseSAPart(sa_rc_part);
@@ -1018,6 +1093,20 @@ void CMappingCore::reverse_read(uchar_t *pattern_ptr, uint32_t pattern_len, ucha
 			(*rc_pattern_ptr_sft)[i] = (((*rc_pattern_ptr)[i - 1] & 0xf) << 4) + ((*rc_pattern_ptr)[i] >> 4);
 		(*rc_pattern_ptr_sft)[pattern_len / 2] = ((*rc_pattern_ptr)[pattern_len / 2 - 1] & 0xf) << 4;
 	}
+}
+
+//**********************************************************************************************************
+// Approximate the cost of indel in terms of mismatches
+uint32_t CMappingCore::indel_to_mismatch_score(int32_t size)
+{
+	double affine_score = 0;
+
+	if(size > 0)
+		affine_score = gap_del_open + ((double) size - 1) * gap_del_extend;
+	else
+		affine_score = gap_ins_open + ((double)-size - 1) * gap_ins_extend;
+
+	return (uint32_t)(affine_score / mismatch_score);
 }
 
 // EOF

@@ -14,28 +14,27 @@
 #define _MAPPING_CORE_H
 
 #include "../common/defs.h"
-#include "../common/idstore.h"
-#include "../common/queue.h"
-#include "../common/mmgr.h"
-#include "../common/stats.h"
+#include "idstore.h"
+#include "queue.h"
+#include "mmgr.h"
+#include "stats.h"
 #include "../common/timer.h"
-#include "../common/results.h"
-#include "../common/params.h"
+#include "results.h"
+#include "params.h"
+#include "../common/utils.h"
 #include "edit_dist.h"
 #include "reads.h"
+#pragma warning (disable: 26495 26451 6385)
 #include "../libs/vectorclass.h"
+#pragma warning (default: 26495 26451 6385)
 #include "LevMyers.h"
+#include "indels.h"
 #include <vector>
 
 #define SELECT_NON_ZERO_VALUES
 #define USE_RESULT_OF_A_MEMCMP
 
 #define USE_128b_SSE_CF_AND_DP
-
-#define SWAP_NIBBLES(x)		((((x) & 0xf) << 4) + ((x) >> 4))
-#define HI_NIBBLE(x)		((x) >> 4)
-#define LO_NIBBLE(x)		((x) & 0x0f)
-#define RAW_HI_NIBBLE(x)	((x) & 0xf0)
 
 #define CMP_DIFFERENT_SWAPPED_NIBBLES(x, y)	((LO_NIBBLE(x) < LO_NIBBLE(y)) ? 1 :\
 											 (LO_NIBBLE(x) > LO_NIBBLE(y)) ? -1 :\
@@ -61,11 +60,15 @@ struct CAux_params {
 
 class CMappingCore
 {
+#ifdef COLLECT_STATS
 	int64_t no_of_CF_accepted;
 	int64_t no_of_CF_discarded;
 	int64_t no_of_CF_accepted_in_malicious_group;
 	int64_t no_of_CF_discarded_in_malicious_group;
 	int64_t no_of_Lev_positive;
+	int64_t no_of_indel_mapping_found;
+	int64_t no_of_indel_mapping_tests;
+#endif
 
 	static uchar_t cmp_lut[256];
 	static uchar_t rc_lut[80];
@@ -104,6 +107,8 @@ class CMappingCore
 	LevMyers* levMyers64;
 	LevMyers* levMyers128;
 	LevMyers* levMyers256;
+	CIndelMatching* indel_matching_dir;
+	CIndelMatching* indel_matching_rc;
 
 	uint32_t no_bins;
 	uint32_t bin_prefix;
@@ -122,8 +127,20 @@ class CMappingCore
 
 	bool sensitive_mode;
 	double sensitivity_factor;
+	bool enable_mapping_indels;
+	uint32_t max_approx_indel_len;
+	uint32_t min_approx_indel_len;
 	uint32_t max_CF_difference;
 	uint32_t max_no_mappings;
+
+	double mismatch_score;
+//	double gap_open;
+//	double gap_extend;
+	double gap_ins_open;
+	double gap_ins_extend;
+	double gap_del_open;
+	double gap_del_extend;
+	double clipping_score;
 
 	vector<string> prefixes;
 	uint32_t prefix_len;
@@ -183,10 +200,9 @@ class CMappingCore
 	uint32_t* curr_dp_ptr;
 	uchar_t* genome_prefetch;
 
-	vector<pair<uint32_t, uint32_t>> dir_match_positions;
-	vector<pair<uint32_t, uint32_t>> rc_match_positions;
+	vector<candidate_mapping_t> dir_match_positions;
+	vector<candidate_mapping_t> rc_match_positions;
 
-	//	vector<tuple<read_id_t, uint32_t, genome_t, uint32_t>> collected_mappings;
 	CMappingsHeapGatherer collected_mappings;
 
 	uint32_t* cur_substr_values_from_pattern;
@@ -199,7 +215,7 @@ class CMappingCore
 	//****************************************************************************
 	//*********************** mapping_core.cpp ***********************************
 	//****************************************************************************
-	inline uint32_t get_next_bin_id(uchar_t* data);
+	inline uint32_t get_next_bin_id(uchar_t* data, uint32_t size);
 	inline uint32_t get_read_prefix(uchar_t* data, uint32_t size);
 
 	void copy_reads(reads_bin_t bin);
@@ -243,7 +259,10 @@ class CMappingCore
 	void build_aux_structures_for_DP(uint32_t* sub_SA, uint32_t sub_size, uint32_t pattern_len, CAux_arrays* aux_arr, CAux_params* aux_params, bool dir);
 	void calculate_CF_128b_SEE_for_dir_and_rc_gen(uint32_t fixedLeft, uint32_t fixedRight, uint32_t pattern_len, uint32_t position_read_from_SA_array, Vec16c& CF, bool dir_gen_flag);
 	void calculate_CF_128b_SSE_for_a_pattern(uchar_t *pattern, uchar_t *pattern_sft, uint32_t pattern_len, uint32_t fixedLeft, uint32_t fixedRight, Vec16c& CF_value);
-	bool test_CF_128b_SSE_difference(Vec16c CF_1, Vec16c CF_2, uint32_t max_diff);
+	inline bool test_CF_128b_SSE_difference(Vec16c CF_1, Vec16c CF_2, uint32_t max_diff)
+	{
+		return horizontal_add(abs(CF_1 - CF_2)) <= max_diff;
+	}
 
 	//****************************************************************************
 	//*********************** mapping_core_sa.cpp ********************************
@@ -276,6 +295,9 @@ class CMappingCore
 		uint32_t* sa_dir_last_index, uint32_t* sa_dir_start_index,
 		bool dir_gen_flag, bool* inside_malicious_group, bool* aux_struct_valid, uint32_t max_mismatches);
 	//--------------------------------->
+
+	// Small utils
+	uint32_t indel_to_mismatch_score(int32_t size);
 
 public:
 	CMappingCore(CParams *params, CObjects *objects, uint32_t _stage_id, mapping_mode_t _mapping_mode);

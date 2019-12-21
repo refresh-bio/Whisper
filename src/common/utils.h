@@ -9,7 +9,6 @@
 // License : GNU GPL 3
 // *******************************************************************************************
 
-
 #ifndef _UTILS_H
 #define _UTILS_H
 
@@ -25,6 +24,7 @@
 #include <cstdio>
 #include <algorithm>
 #include <cmath>
+#include <nmmintrin.h>
 #include "../libs/zlib.h"
 #include "../libs/libdeflate.h"
 
@@ -41,10 +41,18 @@ using namespace std;
 #define BITS2BYTES(x)			(((x) + 7) / 8)
 #define PACKED_READ_LEN(x)		(((x) + 1) / 2)
 #define GET_SYMBOL(seq, pos)	(((seq)[(pos)/2] >> ((((pos)+1) % 2) * 4)) & 0xf)
-#define ASSERT(cnd, msg)		// Assert(cnd, msg)
+#define ASSERT(cnd, msg)		//Assert(cnd, msg)
+
+#define SWAP_NIBBLES(x)		((((x) & 0xf) << 4) + ((x) >> 4))
+#define HI_NIBBLE(x)		((x) >> 4)
+#define LO_NIBBLE(x)		((x) & 0x0f)
+#define RAW_HI_NIBBLE(x)	((x) & 0xf0)
 
 //#define MEMCMP(x, y, len)		A_memcmp(x, y, len)
 #define MEMCMP(x, y, len)		memcmp(x, y, len)
+
+// ************************************************************************************
+const uchar_t code2dna[8] = { 'A', 'C', 'G', 'T', 'N', 'N', 0, 0 };
 
 // ************************************************************************************
 template<typename T>
@@ -73,6 +81,13 @@ inline double log_base(double x, double base)
 	return log10(x) / log10(base);
 }
 
+// ************************************************************************************
+inline uint32_t pop_count(uint64_t x)
+{
+	return (uint32_t)_mm_popcnt_u64(x);
+}
+
+
 // Our pointer aligner - necessary as std::align works properly for (alignment > 8) only since C++17
 void *ptr_align(void *ptr, size_t alignment);
 void *alloc_aligned(void *&raw_ptr, size_t size, size_t alignment);
@@ -84,6 +99,7 @@ void StoreUIntLSB(vector<uchar_t> &dest, uint64_t data, uint32_t no_bytes);
 void StoreUInt(uchar_t *dest, uint64_t data, uint32_t no_bytes);
 void StoreUIntLSB(uchar_t *dest, uint64_t data, uint32_t no_bytes);
 void StoreInt32LSB(uchar_t *dest, int32_t data, uint32_t no_bytes);
+void StoreFloat(uchar_t* dest, float data);
 void LoadUInt(uchar_t *dest, uint64_t &data, uint32_t no_bytes);
 void LoadUInt2(uchar_t *dest, uint32_t &data);
 void LoadUInt4(uchar_t *dest, uint32_t &data);
@@ -96,6 +112,8 @@ string FormatInt(uint64_t x);
 int Int2PChar(uint64_t x, uchar_t *str);
 int SInt2PChar(int64_t x, uchar_t *str);
 int SDouble2PChar(double x, uint32_t prec, uchar_t *str);
+
+uchar_t DNA2Bin(uchar_t x);
 
 string NormalizeDirectory(string dir);
 uint32_t Prefix2Int(string prefix);
@@ -146,8 +164,12 @@ public:
 	int64_t GetSize();
 	int64_t GetRawSize();
 	int64_t Read(void* data, int64_t count);
+	int64_t ReadUint16(uint16_t &data);
+	int64_t ReadUint32(uint32_t &data);
 	int64_t ReadString(string &data);
+
 	int64_t WriteByte(uint32_t data);
+	int64_t WriteUint16(uint16_t data);
 	int64_t WriteUint32(uint32_t data);
 	int64_t Write(void* data, int64_t count);
 	int64_t Write(const void* data, int64_t count);
@@ -205,14 +227,14 @@ class CNumericConversions
 			uint64_t dig3 = val / 100000ull;
 			uint64_t dig4 = val - dig3 * 100000ull;
 		
-			int ndig = NDigits(dig1);
+			uint64_t ndig = NDigits(dig1);
 			
-			memcpy(str, digits+dig1*5+(5-ndig), ndig);
-			memcpy(str+ndig, digits+dig2*5, 5);
-			memcpy(str+ndig+5, digits+dig3*5, 5);
-			memcpy(str+ndig+10, digits+dig4*5, 5);
+			memcpy(str, digits+dig1*5ull+(5ull-ndig), ndig);
+			memcpy(str+ndig, digits+dig2*5ull, 5);
+			memcpy(str+ndig+5, digits+dig3*5ull, 5);
+			memcpy(str+ndig+10, digits+dig4*5ull, 5);
 		
-			return ndig+15;
+			return (int) ndig+15;
 		}
 		else if(val >= 10000000000ull)
 		{
@@ -221,33 +243,33 @@ class CNumericConversions
 			uint64_t dig2 = val / 100000ull;
 			uint64_t dig3 = val - dig2 * 100000ull;
 		
-			int ndig = NDigits(dig1);
+			uint64_t ndig = NDigits(dig1);
 
-			memcpy(str, digits+dig1*5+(5-ndig), ndig);
-			memcpy(str+ndig, digits+dig2*5, 5);
-			memcpy(str+ndig+5, digits+dig3*5, 5);
+			memcpy(str, digits+dig1*5ull+(5ull-ndig), ndig);
+			memcpy(str+ndig, digits+dig2*5ull, 5);
+			memcpy(str+ndig+5, digits+dig3*5ull, 5);
 
-			return ndig+10;
+			return (int) ndig+10;
 		}
 		else if(val >= 100000ull)
 		{
 			uint64_t dig1 = val / 100000ull;
 			uint64_t dig2 = val - dig1 * 100000ull;
 		
-			int ndig = NDigits(dig1);
+			uint64_t ndig = NDigits(dig1);
 
-			memcpy(str, digits+dig1*5+(5-ndig), ndig);
-			memcpy(str+ndig, digits+dig2*5, 5);
+			memcpy(str, digits+dig1*5ull+(5ull-ndig), ndig);
+			memcpy(str+ndig, digits+dig2*5ull, 5);
 
-			return ndig+5;
+			return (int) ndig+5;
 		}
 		else
 		{
-			int ndig = NDigits(val);
+			uint64_t ndig = NDigits(val);
 
-			memcpy(str, digits+val*5+(5-ndig), ndig);
+			memcpy(str, digits+val*5ull+(5ull-ndig), ndig);
 
-			return ndig;
+			return (int) ndig;
 		}
 	}
 

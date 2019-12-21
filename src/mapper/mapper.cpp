@@ -32,8 +32,7 @@ CMapper::CMapper()
 
 	objects.progress = new CProgress();
 
-	// Configuration of asmlib
-	//	SetMemsetCacheLimit(1 << 14);
+	total_input_file_size = 0;
 }
 
 // ************************************************************************************
@@ -108,7 +107,9 @@ bool CMapper::StartMapping()
 	release_serial_processing();
 
 	watch_main.StopTimer();
+#ifdef COLLECT_STATS
 	objects.running_stats->AddTotals(STAT_TIME_MAIN, watch_main.GetElapsedTime());
+#endif
 	if (params.verbosity_level > 0)
 		cerr << "Main processing time: " << watch_main.GetElapsedTime() << "s\n";
 
@@ -133,15 +134,20 @@ bool CMapper::StartMapping()
 		release_serial_processing();
 
 		watch_post.StopTimer();
+
+#ifdef COLLECT_STATS
 		objects.running_stats->AddTotals(STAT_TIME_POST, watch_post.GetElapsedTime());
-	
+#endif
+
 		if (params.verbosity_level > 0)
 			cerr << "Postprocessing time: " << watch_post.GetElapsedTime() << "s\n";
-		
 	}
 
 	watch.StopTimer();
+
+#ifdef COLLECT_STATS
 	objects.running_stats->AddTotals(STAT_TIME_TOTAL, watch.GetElapsedTime());
+#endif
 
 	return res;
 }
@@ -186,7 +192,9 @@ bool CMapper::StartMapping(uint32_t stage_major, uint32_t stage_minor, bool sens
 	}
 
 	watch.StopTimer();
+#ifdef COLLECT_STATS
 	objects.running_stats->AddTotals(STAT_TIME_TOTAL, watch.GetElapsedTime());
+#endif
 	release_serial_processing();
 
 	return res;
@@ -234,7 +242,9 @@ bool CMapper::StartMapping(uint32_t stage_major_from, uint32_t stage_minor_from,
 	}
 
 	watch.StopTimer();
+#ifdef COLLECT_STATS
 	objects.running_stats->AddTotals(STAT_TIME_TOTAL, watch.GetElapsedTime());
+#endif
 	release_serial_processing();
 
 	return res;
@@ -274,7 +284,9 @@ bool CMapper::StartPostProcessing()
 	release_reference();
 
 	watch.StopTimer();
+#ifdef COLLECT_STATS
 	objects.running_stats->AddTotals(STAT_TIME_TOTAL, watch.GetElapsedTime());
+#endif
 	release_serial_processing();
 
 	return res;
@@ -312,7 +324,7 @@ bool CMapper::adjust_threads(bool single_thr_readers)
 	params.no_thr_mapping_cores = params.no_threads;
 
 	// SAM production stage
-	params.no_thr_sam_generators = MAX(params.no_threads - params.no_threads / 8, 1);
+	params.no_thr_sam_generators = MAX(params.no_threads - params.no_threads / 24, 1);
 
 	return true;
 }
@@ -337,7 +349,7 @@ bool CMapper::adjust_memory_splitting()
 	mem_available -= (params.block_size + params.block_overhead_size) * params.no_thr_fastq_reader * params.no_fastq_blocks_per_thread;
 	if (mem_available <= 0)
 	{
-		cerr << "To little memory\n";
+		cerr << "Not enough memory\n";
 		exit(1);
 	}
 
@@ -359,7 +371,7 @@ bool CMapper::adjust_memory_splitting()
 	for (; params.bin_size > 128; params.bin_size = (uint64_t)(params.bin_size * 0.75))
 	{
 		params.no_parts = (mem_available / 2) / params.bin_size;
-		if (params.no_parts > 2 * params.no_bins * params.no_thr_splitter + params.no_parts / 16)
+		if (params.no_parts > 2ull * params.no_bins * params.no_thr_splitter + params.no_parts / 16)
 			break;
 	}
 
@@ -393,7 +405,7 @@ bool CMapper::adjust_memory_mapping()
 	mem_available -= objects.reference->GetSize();
 
 	// Subtract estimated amount of memory for SA parts
-	uint64_t no_parts = params.no_bins * (1 << (params.sa_prefix_overhead * 2));
+	uint64_t no_parts = params.no_bins * (1ull << (params.sa_prefix_overhead * 2));
 	uint64_t mem_for_SA_parts = objects.reference->GetSize() / no_parts * params.no_thr_mapping_cores; // no. of contemporarily used parts 
 	mem_for_SA_parts *= 2;				// count both SA dir and SA r.c.
 	mem_for_SA_parts *= 4;				// 4B for each element
@@ -402,7 +414,7 @@ bool CMapper::adjust_memory_mapping()
 
 	if (mem_available < (1ll << 28))
 	{
-		cerr << "To little memory\n";
+		cerr << "Not enough memory\n";
 		exit(1);
 	}
 
@@ -439,7 +451,7 @@ bool CMapper::adjust_memory_mapping()
 	for (; params.bin_size > 128; params.bin_size = (uint64_t)(params.bin_size * 0.75))
 	{
 		params.no_parts = (mem_available / 2) / params.bin_size;
-		if (params.no_parts > 2 * params.no_bins * params.no_thr_mapping_cores + params.no_parts / 16)
+		if (params.no_parts > 2ull * params.no_bins * params.no_thr_mapping_cores + params.no_parts / 16)
 			break;
 	}
 
@@ -476,19 +488,19 @@ bool CMapper::adjust_memory_postprocessing()
 	// Memory for reads
 	mem_available -= params.read_len * params.no_thr_splitter * 4;
 
-	mem_available -= params.max_fastq_rec_length * params.no_thr_sam_generators * 3 * 4;
+	mem_available -= (int64_t) params.max_fastq_rec_length * params.no_thr_sam_generators * 3 * 4;
 
 	// Memory for CIGAR and MD
-	mem_available -= 6 * params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings;
+	mem_available -= 6ll * params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings;
 
 	// Memory for SAM parts
-	params.sam_buffer_memory = 128 << 20;
-	mem_available -= 2 * params.sam_buffer_memory;
+	params.sam_buffer_memory = 128ull << 20;
+	mem_available -= 2ll * params.sam_buffer_memory;
 
 	if (params.store_BAM)
-		params.sam_part_size = 64 << 10;
+		params.sam_part_size = 64ull << 10;
 	else
-		params.sam_part_size = 64 << 10;
+		params.sam_part_size = 64ull << 10;
 //		params.sam_part_size = 16 << 20;
 
 	int64_t mem_sam_parts;
@@ -502,7 +514,7 @@ bool CMapper::adjust_memory_postprocessing()
 
 	if (mem_available <= 0)
 	{
-		cerr << "To little memory\n";
+		cerr << "Not enough memory\n";
 		exit(1);
 	}
 
@@ -513,7 +525,7 @@ bool CMapper::adjust_memory_postprocessing()
 	else
 		params.block_size = 1 << 25;
 
-	params.no_fastq_blocks_per_thread = 1 << params.id_bits_subgroup;
+	params.no_fastq_blocks_per_thread = 1ull << params.id_bits_subgroup;
 
 /*	for (params.no_fastq_blocks_per_thread = (1 << params.id_bits_subgroup) * 4;
 		params.no_fastq_blocks_per_thread > (1 << params.id_bits_subgroup) * 2.3;
@@ -542,7 +554,7 @@ bool CMapper::adjust_memory_postprocessing()
 /*	mem_available -= (params.block_size + params.block_overhead_size) * (params.no_thr_fastq_reader + params.no_thr_sam_generators) * params.no_fastq_blocks_per_thread;
 	if (mem_available <= 0)
 	{
-		cerr << "To little memory\n";
+		cerr << "Not enough memory\n";
 		exit(1);
 	}*/
 
@@ -556,7 +568,8 @@ bool CMapper::adjust_memory_postprocessing()
 		cerr << "Max total memory             : " << FormatInt(params.max_total_memory) << "\n";
 		cerr << "Memory settings for postprocessing stage:\n";
 		cerr << "  no. FASTQ blocks per thread: " << FormatInt(params.no_fastq_blocks_per_thread) << "\n";
-		cerr << "  mem. per FASTQ blocks      : " << FormatInt((params.block_size + params.block_overhead_size) * (params.no_thr_fastq_reader + params.no_thr_sam_generators) * params.no_fastq_blocks_per_thread) << "\n";
+		cerr << "  mem. per FASTQ blocks      : " << FormatInt(((uint64_t) params.block_size + params.block_overhead_size) * 
+			((uint64_t) params.no_thr_fastq_reader + params.no_thr_sam_generators) * params.no_fastq_blocks_per_thread) << "\n";
 		cerr << "  mem for groups delivery    : " << FormatInt(params.max_res_dev_memory) << "\n";
 		cerr << "  mem for SAM parts          : " << FormatInt(mem_sam_parts) << "\n";
 		fflush(stderr);
@@ -602,17 +615,36 @@ bool CMapper::adjust_bins()
 // Adjust splitting of reads for the stages
 bool CMapper::adjust_stage_segments()
 {
+	if (params.max_no_errors == 0)
+	{
+		// Adjust max. no of errors according to read lengths
+		if (params.max_read_len < 100)
+			params.max_no_errors = 3;
+		else if (params.max_read_len < 127)
+			params.max_no_errors = 4;
+		else if (params.max_read_len < 153)
+			params.max_no_errors = 5;
+		else if (params.max_read_len < 203)
+			params.max_no_errors = 6;
+		else if (params.max_read_len < 253)
+			params.max_no_errors = 7;
+		else
+			params.max_no_errors = 8;
+
+		params.max_approx_indel_mismatches = (uint32_t)(params.max_no_errors * params.sensitivity_factor);
+	}
+
 	uint32_t max_errors = params.max_no_errors;
 
 	params.stage_segments.clear();
-	params.stage_segments.resize(max_errors + 2);
+	params.stage_segments.resize(max_errors + 2ull);
 
 	for (uint32_t i = 0; i <= max_errors; ++i)
 		for (uint32_t j = 0; j <= i; ++j)
 			params.stage_segments[i].push_back(make_pair((params.min_read_len*j + i) / (i + 1), (params.min_read_len*(j + 1) + i) / (i + 1)));
 
 	// ``Sentinel''
-	params.stage_segments[max_errors + 1].push_back(make_pair(0, params.min_read_len));
+	params.stage_segments[max_errors + 1ull].push_back(make_pair(0, params.min_read_len));
 
 	return true;
 }
@@ -691,11 +723,6 @@ bool CMapper::adjust_max_and_min_read_len(vector<uint64_t> &hist_read_len)
 
 	double max_frac_errors = (double)params.max_no_errors / params.min_read_len;
 
-/*	if (params.max_frac_errors > largest_frac_errors)
-		params.max_frac_errors = largest_frac_errors;
-
-	params.max_no_errors = (uint32_t) (params.min_read_len * params.max_frac_errors);*/
-
 	if(max_frac_errors > largest_frac_errors)
 		params.max_no_errors = (uint32_t)(params.min_read_len * largest_frac_errors);
 
@@ -710,8 +737,13 @@ bool CMapper::prepare_reference_sa()
 	objects.sa_dir = new CSuffixArray(params.sa_in_ram);
 	objects.sa_rc = new CSuffixArray(params.sa_in_ram);
 
+#ifdef ENABLE_VCF_VARIANTS
+	objects.variant_db = new CVariantDB();
+#endif
+
 	bool res = true;
 
+	// Load reference
 	if (params.verbosity_level > 0)
 	{
 		cerr << "** Loading reference and index **\n";
@@ -719,6 +751,7 @@ bool CMapper::prepare_reference_sa()
 	}
 	res &= objects.reference->SetIndexName(params.index_name);
 
+	// Prepare for SA load
 	if (params.verbosity_level > 1)
 	{
 		cerr << "Preparing suffix arrays\n";
@@ -726,6 +759,26 @@ bool CMapper::prepare_reference_sa()
 	}
 	res &= objects.sa_dir->SetIndexName(params.index_name, genome_t::direct);
 	res &= objects.sa_rc->SetIndexName(params.index_name, genome_t::rev_comp);
+
+#ifdef ENABLE_VCF_VARIANTS
+	// Load variants (if required)
+	if (params.enable_var_indel_long || params.enable_var_indel_short || params.enable_var_snp)
+	{
+		if (params.verbosity_level > 0)
+		{
+			cerr << "** Loading variants database **\n";
+			fflush(stderr);
+		}
+
+		shared_ptr<CMapperFile> vf_vcf(new CMapperFile(EXT_VCF, MARKER_VCF));
+		shared_ptr<CMapperFile> vf_ref_snp(new CMapperFile(EXT_REF_SNP, MARKER_REF_SNP));
+
+		if(vf_vcf->OpenRead(params.index_name) && vf_ref_snp->OpenRead(params.index_name))
+			objects.variant_db->Deserialize(vf_vcf, vf_ref_snp);
+		else
+			cerr << "Variant file index does not exist\n";
+	}
+#endif
 
 	// Prepare ID store
 	CIDStore *id_store = new CIDStore(params.id_bits_total, params.id_bits_subgroup, params.id_bits_local, params.verbosity_level);
@@ -750,6 +803,9 @@ bool CMapper::prepare_reference_sa()
 bool CMapper::prepare_reference()
 {
 	objects.reference = new CReference();
+#ifdef ENABLE_VCF_VARIANTS
+	objects.variant_db = new CVariantDB();
+#endif
 
 	bool res = true;
 
@@ -760,6 +816,26 @@ bool CMapper::prepare_reference()
 	}
 
 	res = objects.reference->SetIndexName(params.index_name);
+
+#ifdef ENABLE_VCF_VARIANTS
+	// Load variants (if required)
+	if (params.enable_var_indel_long || params.enable_var_indel_short || params.enable_var_snp)
+	{
+		if (params.verbosity_level > 0)
+		{
+			cerr << "** Loading variants database **\n";
+			fflush(stderr);
+		}
+
+		shared_ptr<CMapperFile> vf_vcf(new CMapperFile(EXT_VCF, MARKER_VCF));
+		shared_ptr<CMapperFile> vf_ref_snp(new CMapperFile(EXT_REF_SNP, MARKER_REF_SNP));
+
+		if (vf_vcf->OpenRead(params.index_name) && vf_ref_snp->OpenRead(params.index_name))
+			objects.variant_db->Deserialize(vf_vcf, vf_ref_snp);
+		else
+			cerr << "Variant file index does not exist\n";
+	}
+#endif
 
 	return res;
 }
@@ -776,6 +852,11 @@ bool CMapper::release_reference_sa()
 	objects.sa_dir = nullptr;
 	objects.sa_rc = nullptr;
 
+#ifdef ENABLE_VCF_VARIANTS
+	delete objects.variant_db;
+	objects.variant_db = nullptr;
+#endif
+
 	return true;
 }
 
@@ -784,8 +865,12 @@ bool CMapper::release_reference_sa()
 bool CMapper::release_reference()
 {
 	delete objects.reference;
-
 	objects.reference = nullptr;
+
+#ifdef ENABLE_VCF_VARIANTS
+	delete objects.variant_db;
+	objects.variant_db = nullptr;
+#endif
 
 	return true;
 }
@@ -816,6 +901,7 @@ bool CMapper::prepare_running_stats(bool before_preprocessing)
 	if (!objects.running_stats)
 		return false;
 
+#ifdef COLLECT_STATS
 	if (before_preprocessing)
 	{
 		objects.running_stats->Register(1000001, "Fastq Readers, send bytes: ", running_stats_t::lists);
@@ -847,6 +933,9 @@ bool CMapper::prepare_running_stats(bool before_preprocessing)
 		objects.running_stats->Register(STAT_MAPPED_PE_INDEPENDENT_SINGLE, "No. of mapped PE reads - unpaired: one mapped", running_stats_t::totals);
 		objects.running_stats->Register(STAT_MAPPED_PE_INDEPENDENT_ERRORS, "No. of mapped PE reads - unpaired errors", running_stats_t::totals);
 		objects.running_stats->Register(STAT_MAPPED_PE_INDEPENDENT_NONE, "No. of unmapped PE reads", running_stats_t::totals);
+
+		objects.running_stats->Register(STAT_SHORT_INDEL_REFINEMENTS_LEV, "No. of refined short indels from Lev", running_stats_t::totals);
+		objects.running_stats->Register(STAT_SHORT_INDEL_REFINEMENTS_MAPPING, "No. of refined short indels from mapping", running_stats_t::totals);
 
 		for (int i = 0; i < (int) MatchingMethod::size(); ++i) {
 			ostringstream oss;
@@ -886,6 +975,8 @@ bool CMapper::prepare_running_stats(bool before_preprocessing)
 				objects.running_stats->Register(STAT_CF_ACCEPTED_IN_MALICIOUS_GROUPS + (i << 5) + j, "No. of TESTED reads (cf+) IN MALICIOUS_GROUPS at the " + StageDesc(i, j), running_stats_t::lists);
 				objects.running_stats->Register(STAT_CF_DISCARDED_IN_MALICIOUS_GROUPS + (i << 5) + j, "No. of DISCARDED reads (CF-)IN MALICIOUS_GROUPS at the " + StageDesc(i, j), running_stats_t::lists);
 				objects.running_stats->Register(STAT_LEV_POSITIVE + (i << 5) + j, "No. of positive tests (LEV+) made by Lev_diag2 " + StageDesc(i, j), running_stats_t::lists);
+				objects.running_stats->Register(STAT_INDEL_MAPPING_FOUND + (i << 5) + j, "No. of found indels during mapping " + StageDesc(i, j), running_stats_t::lists);
+				objects.running_stats->Register(STAT_INDEL_MAPPING_TESTS + (i << 5) + j, "No. of examined indels during mapping " + StageDesc(i, j), running_stats_t::lists);
 				//objects.running_stats->Register(STAT_LEV_NEGATIVE + (i << 5) + j, "No. of negative tests (LEV-) made by Lev_diag2 " + StageDesc(i, j), running_stats_t::lists);
 			}
 
@@ -903,9 +994,25 @@ bool CMapper::prepare_running_stats(bool before_preprocessing)
 				objects.running_stats->Register(STAT_CF_ACCEPTED_IN_MALICIOUS_GROUPS + (max_errors << 5) + j + (1 << 10), "No. of TESTED reads (cf+) IN MALICIOUS_GROUPS at the " + StageDesc(max_errors, j, true), running_stats_t::lists);
 				objects.running_stats->Register(STAT_CF_DISCARDED_IN_MALICIOUS_GROUPS + (max_errors << 5) + j + (1 << 10), "No. of DISCARDED reads (CF-)IN MALICIOUS_GROUPS at the " + StageDesc(max_errors, j, true), running_stats_t::lists);
 				objects.running_stats->Register(STAT_LEV_POSITIVE + (max_errors << 5) + j + (1 << 10), "No. of positive tests (LEV+) made by Lev_diag2 " + StageDesc(max_errors, j, true), running_stats_t::lists);
+				objects.running_stats->Register(STAT_INDEL_MAPPING_FOUND + (max_errors << 5) + j + (1 << 10), "No. of found indels during mapping " + StageDesc(max_errors, j, true), running_stats_t::lists);
+				objects.running_stats->Register(STAT_INDEL_MAPPING_TESTS + (max_errors << 5) + j + (1 << 10), "No. of examined indels during mapping " + StageDesc(max_errors, j, true), running_stats_t::lists);
 				//objects.running_stats->Register(STAT_LEV_NEGATIVE + (max_errors << 5) + j + (1 << 10), "No. of negative tests (LEV-) made by Lev_diag2 " + StageDesc(max_errors, j, true), running_stats_t::lists);
 			}
 	}
+
+	for (uint32_t j = 0; j <= STAT_MAX_LEN_INDELS; ++j)
+	{
+		objects.running_stats->Register(STAT_MAPPED_PE_HISTO_VAR_INS_LONG + j, "Variant long indel " + to_string(j), running_stats_t::totals);
+		objects.running_stats->Register(STAT_MAPPED_PE_HISTO_VAR_DEL_LONG + j, "Variant long indel " + to_string(j), running_stats_t::totals);
+	}
+
+	for (uint32_t j = 0; j <= STAT_MAX_READ_LEN; ++j)
+	{
+		objects.running_stats->Register(STAT_READS_LEN + j, "Read len " + Int2StringFilled(j, 3), running_stats_t::totals);
+		objects.running_stats->Register(STAT_READS_LEN_WO_NS + j, "Read len w/o Ns " + Int2StringFilled(j, 3), running_stats_t::totals);
+		objects.running_stats->Register(STAT_READS_NS + j, "Read with Ns " + Int2StringFilled(j, 3), running_stats_t::totals);
+	}
+#endif
 
 	return true;
 }
@@ -914,9 +1021,11 @@ bool CMapper::prepare_running_stats(bool before_preprocessing)
 // Read FASTQ files and split them into bins
 bool CMapper::reads_splitting()
 {
+#ifdef COLLECT_STATS
 	objects.running_stats->Register(STAT_TIME_THR_SPLITTER, "Thread time: reads splitting     ", running_stats_t::lists);
 	objects.running_stats->Register(STAT_TIME_THR_FASTQ_READER, "Thread time: FASTQ reader        ", running_stats_t::lists);
 	objects.running_stats->Register(STAT_TIME_THR_BIN_WRITER_BASE, "Thread time: bin writer (split)  ", running_stats_t::totals);
+#endif
 
 	objects.progress->Init(total_input_file_size, true);
 	objects.progress->SetComment("");
@@ -932,9 +1041,9 @@ bool CMapper::reads_splitting()
 
 	// Prepare pool memory allocators
 	objects.mp_fastq_blocks = new CMemoryPool<uchar_t>((params.block_size + params.block_overhead_size) * params.no_thr_fastq_reader * params.no_fastq_blocks_per_thread,
-		params.block_size + params.block_overhead_size);
-	objects.mp_bins_write = new CMemoryPool<uchar_t>(params.no_parts * params.bin_size, params.bin_size);
-	objects.mp_reads = new CMemoryPool<uchar_t>(params.read_len * params.no_thr_splitter * 4, params.read_len);
+		params.block_size + params.block_overhead_size, "mp_fastq_blocks");
+	objects.mp_bins_write = new CMemoryPool<uchar_t>(params.no_parts * params.bin_size, params.bin_size, "mp_bins_write");
+	objects.mp_reads = new CMemoryPool<uchar_t>(params.read_len * params.no_thr_splitter * 4, params.read_len, "mp_reads");
 
 	// Prepare queues
 	objects.q_file_names = new CRegisteringQueue<file_name_no_t>(1);
@@ -1037,7 +1146,9 @@ bool CMapper::reads_splitting()
 	delete id_store;
 
 	watch.StopTimer();
+#ifdef COLLECT_STATS
 	objects.running_stats->AddTotals(STAT_TIME_SPLIT, watch.GetElapsedTime());
+#endif
 
 	if (params.verbosity_level > 0)
 		cerr << "Preprocessing time: " << watch.GetElapsedTime() << "s\n";
@@ -1061,9 +1172,10 @@ bool CMapper::reads_mapping_first_stratum()
 
 	uint32_t max_stage = params.max_no_errors;
 
+#ifdef COLLECT_STATS
 	objects.running_stats->Register(STAT_SORTING_TOTAL, "Reads sorting (total)", running_stats_t::totals);
 	objects.running_stats->Register(STAT_TIME_THR_RES_WRITER, "Thread time: results writer      ", running_stats_t::totals);
-
+#endif
 	// Prepare stage-substage descriptions
 	vector<tuple<uint32_t, uint32_t, bool>> stages_to_do;
 	for (uint32_t stage_major = 0; stage_major <= max_stage;)
@@ -1081,12 +1193,12 @@ bool CMapper::reads_mapping_first_stratum()
 	// Mapping results queue, thread, and memory pool
 	uint32_t tot_substages = (uint32_t)stages_to_do.size() - 1;
 
-	objects.progress->Init(tot_substages * params.no_bins, true);
+	objects.progress->Init((int64_t) tot_substages * params.no_bins, true);
 
-	objects.mp_reads = new CMemoryPool<uchar_t>(params.read_len * params.no_thr_mapping_cores, params.read_len);
+	objects.mp_reads = new CMemoryPool<uchar_t>(params.read_len * params.no_thr_mapping_cores, params.read_len, "mp_reads");
 	objects.q_map_res = new CRegisteringQueue<res_group_t>(params.no_thr_mapping_cores * tot_substages);
 	objects.mp_map_res = new CMemoryPool<uchar_t>(params.no_res_parts * params.res_group_size,
-		params.res_group_size);
+		params.res_group_size, "mp_map_res");
 	CResultGroupsWriter *rgw = new CResultGroupsWriter(&params, &objects, prefix_name);
 	thread *thr_rgw = new thread(ref(*rgw));
 
@@ -1100,16 +1212,20 @@ bool CMapper::reads_mapping_first_stratum()
 		uint32_t prev_stage_minor = get<1>(*(p - 1));
 
 		uint32_t stage_id = (stage_major << 5) + stage_minor + (sensitive_mode ? (1 << 10) : 0);
+#ifdef COLLECT_STATS
 		objects.running_stats->Register(STAT_TIME_THR_BIN_READER_BASE + stage_id, "Thread time: bin reader " + StageDesc(stage_id), running_stats_t::totals);
 		objects.running_stats->Register(STAT_TIME_THR_BIN_WRITER_BASE + stage_id, "Thread time: bin writer " + StageDesc(stage_id), running_stats_t::totals);
 		objects.running_stats->Register(STAT_TIME_THR_MAPPING_CORE_BASE + stage_id, "Thread time: map. core  " + StageDesc(stage_id), running_stats_t::lists);
+#endif
 
 		objects.progress->SetComment("  (" + StageDesc(stage_id) + +")");
 
 		watch.StartTimer();
 		stage(stage_major, stage_minor, prev_stage_major, prev_stage_minor, mapping_mode_t::first, sensitive_mode, (p + 1) == stages_to_do.end());
 		watch.StopTimer();
+#ifdef COLLECT_STATS
 		objects.running_stats->AddTotals(STAT_TIME_BASE + (stage_major << 5) + stage_minor + (sensitive_mode ? (1 << 10) : 0), watch.GetElapsedTime());
+#endif
 	}
 
 	thr_rgw->join();
@@ -1144,8 +1260,10 @@ bool CMapper::reads_mapping_second_stratum()
 
 	uint32_t max_stage = params.max_no_errors;
 
+#ifdef COLLECT_STATS
 	objects.running_stats->Register(STAT_SORTING_TOTAL, "Reads sorting (total)", running_stats_t::totals);
 	objects.running_stats->Register(STAT_TIME_THR_RES_WRITER, "Thread time: results writer      ", running_stats_t::totals);
+#endif
 
 	// Prepare stage-substage descriptions
 	vector<tuple<uint32_t, uint32_t, bool>> stages_to_do;
@@ -1164,12 +1282,12 @@ bool CMapper::reads_mapping_second_stratum()
 	// Mapping results queue, thread, and memory pool
 	uint32_t tot_substages = (uint32_t)stages_to_do.size() - 1;
 
-	objects.progress->Init(tot_substages * params.no_bins, true);
+	objects.progress->Init((int64_t) tot_substages * params.no_bins, true);
 
-	objects.mp_reads = new CMemoryPool<uchar_t>(params.read_len * params.no_thr_mapping_cores, params.read_len);
+	objects.mp_reads = new CMemoryPool<uchar_t>(params.read_len * params.no_thr_mapping_cores, params.read_len, "mp_reads");
 	objects.q_map_res = new CRegisteringQueue<res_group_t>(params.no_thr_mapping_cores * tot_substages);
 	objects.mp_map_res = new CMemoryPool<uchar_t>(params.no_res_parts * params.res_group_size,
-		params.res_group_size);
+		params.res_group_size, "mp_map_res");
 	CResultGroupsWriter *rgw = new CResultGroupsWriter(&params, &objects, prefix_name);
 	thread *thr_rgw = new thread(ref(*rgw));
 
@@ -1182,16 +1300,21 @@ bool CMapper::reads_mapping_second_stratum()
 		uint32_t prev_stage_minor = get<1>(*(p - 1));
 
 		uint32_t stage_id = (stage_major << 5) + stage_minor + (sensitive_mode ? (1 << 10) : 0);
+#ifdef COLLECT_STATS
 		objects.running_stats->Register(STAT_TIME_THR_BIN_READER_BASE + stage_id, "Thread time: bin reader " + StageDesc(stage_id), running_stats_t::totals);
 		objects.running_stats->Register(STAT_TIME_THR_BIN_WRITER_BASE + stage_id, "Thread time: bin writer " + StageDesc(stage_id), running_stats_t::totals);
 		objects.running_stats->Register(STAT_TIME_THR_MAPPING_CORE_BASE + stage_id, "Thread time: map. core  " + StageDesc(stage_id), running_stats_t::lists);
+#endif
 
 		objects.progress->SetComment("  (" + StageDesc(stage_id) + +")");
 
 		watch.StartTimer();
 		stage(stage_major, stage_minor, prev_stage_major, prev_stage_minor, mapping_mode_t::second, sensitive_mode);
 		watch.StopTimer();
+
+#ifdef COLLECT_STATS
 		objects.running_stats->AddTotals(STAT_TIME_BASE + (stage_major << 5) + stage_minor + (sensitive_mode ? (1 << 10) : 0), watch.GetElapsedTime());
+#endif
 	}
 
 	thr_rgw->join();
@@ -1226,8 +1349,10 @@ bool CMapper::reads_mapping_all_strata()
 
 	uint32_t max_stage = params.max_no_errors;
 
+#ifdef COLLECT_STATS
 	objects.running_stats->Register(STAT_SORTING_TOTAL, "Reads sorting (total)", running_stats_t::totals);
 	objects.running_stats->Register(STAT_TIME_THR_RES_WRITER, "Thread time: results writer      ", running_stats_t::totals);
+#endif
 
 	// Prepare stage-substage descriptions
 	vector<pair<uint32_t, uint32_t>> stages_to_do;
@@ -1238,10 +1363,10 @@ bool CMapper::reads_mapping_all_strata()
 	// Mapping results queue, thread, and memory pool
 	uint32_t tot_substages = (uint32_t)stages_to_do.size() - 1;
 
-	objects.mp_reads = new CMemoryPool<uchar_t>(params.read_len * params.no_thr_mapping_cores, params.read_len);
+	objects.mp_reads = new CMemoryPool<uchar_t>(params.read_len * params.no_thr_mapping_cores, params.read_len, "mp_reads");
 	objects.q_map_res = new CRegisteringQueue<res_group_t>(params.no_thr_mapping_cores * tot_substages);
 	objects.mp_map_res = new CMemoryPool<uchar_t>(params.no_res_parts * params.res_group_size,
-		params.res_group_size);
+		params.res_group_size, "mp_map_res");
 	CResultGroupsWriter *rgw = new CResultGroupsWriter(&params, &objects, prefix_name);
 	thread *thr_rgw = new thread(ref(*rgw));
 
@@ -1254,14 +1379,19 @@ bool CMapper::reads_mapping_all_strata()
 		uint32_t prev_stage_minor = (p - 1)->second;
 
 		uint32_t stage_id = (stage_major << 5) + stage_minor;
+#ifdef COLLECT_STATS
 		objects.running_stats->Register(STAT_TIME_THR_BIN_READER_BASE + stage_id, "Thread time: bin reader " + StageDesc(stage_id), running_stats_t::totals);
 		objects.running_stats->Register(STAT_TIME_THR_BIN_WRITER_BASE + stage_id, "Thread time: bin writer " + StageDesc(stage_id), running_stats_t::totals);
 		objects.running_stats->Register(STAT_TIME_THR_MAPPING_CORE_BASE + stage_id, "Thread time: map. core  " + StageDesc(stage_id), running_stats_t::lists);
+#endif
 
 		watch.StartTimer();
 		stage(stage_major, stage_minor, prev_stage_major, prev_stage_minor, mapping_mode_t::all);
 		watch.StopTimer();
+		
+#ifdef COLLECT_STATS
 		objects.running_stats->AddTotals(STAT_TIME_BASE + (stage_major << 5) + stage_minor, watch.GetElapsedTime());
+#endif
 	}
 
 	thr_rgw->join();
@@ -1284,12 +1414,13 @@ bool CMapper::reads_mapping_all_strata()
 // Post processing of mapped reads
 bool CMapper::reads_postprocessing(mapping_mode_t mapping_mode)
 {
+#ifdef COLLECT_STATS
 	objects.running_stats->Register(STAT_TIME_THR_FASTQ_READER_PP, "Thread time: FASTQ reader post processing ", running_stats_t::lists);
 	objects.running_stats->Register(STAT_TIME_THR_RES_READER, "Thread time: result groups readers        ", running_stats_t::totals);
 	objects.running_stats->Register(STAT_TIME_THR_SAM_GENERATOR, "Thread time: SAM generators               ", running_stats_t::lists);
 	objects.running_stats->Register(STAT_TIME_THR_SAM_SORTING, "Thread time: SAM sorting                  ", running_stats_t::lists);
 	objects.running_stats->Register(STAT_TIME_THR_SAM_PROCESSING, "Thread time: SAM processing               ", running_stats_t::lists);
-
+#endif
 	CStopWatch watch;
 	watch.StartTimer();
 
@@ -1306,36 +1437,44 @@ bool CMapper::reads_postprocessing(mapping_mode_t mapping_mode)
 //		(params.block_size + params.block_overhead_size) * (params.no_thr_fastq_reader + params.no_thr_sam_generators) * params.no_fastq_blocks_per_thread,
 //		params.block_size + params.block_overhead_size);
 
-	objects.mp_fastq_blocks = new CMemoryPool<uchar_t>(
-		(params.block_size + params.block_overhead_size) * params.no_fastq_blocks_per_thread * (2.5 * params.no_thr_fastq_reader + params.no_thr_sam_generators),
-		params.block_size + params.block_overhead_size);
-	objects.IncreaseMem("mp_fastq_blocks", (params.block_size + params.block_overhead_size) * params.no_fastq_blocks_per_thread * (2.5 * params.no_thr_fastq_reader + params.no_thr_sam_generators));
+	objects.mp_fastq_blocks = new CMemoryPool<uchar_t>((int64_t) 
+		((params.block_size + params.block_overhead_size) * params.no_fastq_blocks_per_thread * (2.5 * params.no_thr_fastq_reader + params.no_thr_sam_generators)),
+		params.block_size + params.block_overhead_size, "mp_fastq_blocks");
+	objects.IncreaseMem("mp_fastq_blocks", (int64_t)((params.block_size + params.block_overhead_size) * params.no_fastq_blocks_per_thread *
+		(2.5 * params.no_thr_fastq_reader + params.no_thr_sam_generators)));
 
-	objects.mp_fastq_records = new CMemoryPool<uchar_t>(params.max_fastq_rec_length * params.no_thr_sam_generators * 3 * 4, params.max_fastq_rec_length);
-	objects.IncreaseMem("mp_fastq_records", params.max_fastq_rec_length * params.no_thr_sam_generators * 3 * 4);
+	objects.mp_fastq_records = new CMemoryPool<uchar_t>((int64_t) params.max_fastq_rec_length * params.no_thr_sam_generators * 3 * 4, params.max_fastq_rec_length, 
+		"mp_fastq_records");
+	objects.IncreaseMem("mp_fastq_records", (int64_t) params.max_fastq_rec_length * params.no_thr_sam_generators * 3 * 4);
 
 	if (params.gzipped_SAM_level == 0)
 	{
-		objects.mp_sam_parts = new CMemoryPool<uchar_t>(params.sam_part_size * params.no_thr_sam_generators * 2, params.sam_part_size);
-		objects.IncreaseMem("mp_sam_parts", params.sam_part_size * params.no_thr_sam_generators * 2);
+		objects.mp_sam_parts = new CMemoryPool<uchar_t>((int64_t) params.sam_part_size * params.no_thr_sam_generators * 2, params.sam_part_size, "mp_sam_parts");
+		objects.IncreaseMem("mp_sam_parts", (int64_t) params.sam_part_size * params.no_thr_sam_generators * 2);
 	}
 	else
 	{
-		objects.mp_sam_parts = new CMemoryPool<uchar_t>(params.sam_part_size * params.no_thr_sam_generators * 3, params.sam_part_size);
-		objects.IncreaseMem("mp_sam_parts", params.sam_part_size * params.no_thr_sam_generators * 3);
+		objects.mp_sam_parts = new CMemoryPool<uchar_t>((int64_t) params.sam_part_size * params.no_thr_sam_generators * 3, params.sam_part_size, "mp_sam_parts");
+		objects.IncreaseMem("mp_sam_parts", (int64_t) params.sam_part_size * params.no_thr_sam_generators * 3);
 	}
 
-	objects.mp_ext_cigar = new CMemoryPool<uchar_t>(params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings, params.max_cigar_len);
-	objects.IncreaseMem("mp_cigar_ext", params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings);
+	int mult_cigars = 4;
 
-	objects.mp_cigar = new CMemoryPool<uchar_t>(params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings, params.max_cigar_len);
-	objects.IncreaseMem("mp_cigar", params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings);
+	objects.mp_ext_cigar = new CMemoryPool<uchar_t>((int64_t) params.max_cigar_len * params.no_thr_sam_generators * mult_cigars * params.max_no_mappings, params.max_cigar_len, 
+		"mp_ext_cigar");
+	objects.IncreaseMem("mp_cigar_ext", (int64_t) params.max_cigar_len * params.no_thr_sam_generators * mult_cigars * params.max_no_mappings);
 
-	objects.mp_cigar_bin = new CMemoryPool<uint32_t>(params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings, params.max_cigar_len);
-	objects.IncreaseMem("mp_cigar_bin", params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings);
+	objects.mp_cigar = new CMemoryPool<uchar_t>((int64_t) params.max_cigar_len * params.no_thr_sam_generators * mult_cigars * params.max_no_mappings, params.max_cigar_len, 
+		"mp_cigar");
+	objects.IncreaseMem("mp_cigar", (int64_t) params.max_cigar_len * params.no_thr_sam_generators * mult_cigars * params.max_no_mappings);
+	
+	objects.mp_cigar_bin = new CMemoryPool<uint32_t>((int64_t) params.max_cigar_len * params.no_thr_sam_generators * mult_cigars * params.max_no_mappings, params.max_cigar_len, 
+		"mp_cigar_bin");
+	objects.IncreaseMem("mp_cigar_bin", (int64_t) params.max_cigar_len * params.no_thr_sam_generators * mult_cigars * params.max_no_mappings);
 
-	objects.mp_mdz = new CMemoryPool<uchar_t>(params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings, params.max_cigar_len);
-	objects.IncreaseMem("mp_mdz", params.max_cigar_len * params.no_thr_sam_generators * 4 * params.max_no_mappings);
+	objects.mp_mdz = new CMemoryPool<uchar_t>((int64_t) params.max_cigar_len * params.no_thr_sam_generators * mult_cigars * params.max_no_mappings, params.max_cigar_len, 
+		"mp_mdz");
+	objects.IncreaseMem("mp_mdz", (int64_t) params.max_cigar_len * params.no_thr_sam_generators * mult_cigars * params.max_no_mappings);
 
 	// Prepare queues
 	objects.q_file_names = new CRegisteringQueue<file_name_no_t>(1);
@@ -1345,7 +1484,7 @@ bool CMapper::reads_postprocessing(mapping_mode_t mapping_mode)
 
 	objects.mem_monitor = new CMemoryMonitor(params.max_res_dev_memory);
 
-	objects.ptr_pool = new CPtrPool(params.no_thr_sam_generators * 2.5);
+	objects.ptr_pool = new CPtrPool((int) (params.no_thr_sam_generators * 2.5));
 
 	// Load ID store
 	CIDStore *id_store = new CIDStore(params.id_bits_total, params.id_bits_subgroup, params.id_bits_local, params.verbosity_level);
@@ -1482,13 +1621,15 @@ bool CMapper::reads_mapping_single_stage(uint32_t stage_major, uint32_t stage_mi
 	//	uint32_t max_stage = max(params.max_no_mismatches, params.max_no_indels);
 	//	max_stage = 1;
 
+#ifdef COLLECT_STATS
 	objects.running_stats->Register(STAT_SORTING_TOTAL, "Reads sorting (total)", running_stats_t::totals);
 	objects.running_stats->Register(STAT_TIME_THR_RES_WRITER, "Thread time: results writer      ", running_stats_t::totals);
+#endif
 
 	// Mapping results queue, thread, and memory pool
-	objects.mp_reads = new CMemoryPool<uchar_t>(params.read_len * params.no_thr_mapping_cores, params.read_len);
+	objects.mp_reads = new CMemoryPool<uchar_t>(params.read_len * params.no_thr_mapping_cores, params.read_len, "mp_reads");
 	objects.q_map_res = new CRegisteringQueue<res_group_t>(params.no_thr_mapping_cores);
-	objects.mp_map_res = new CMemoryPool<uchar_t>(params.no_res_parts * params.res_group_size, params.res_group_size);
+	objects.mp_map_res = new CMemoryPool<uchar_t>(params.no_res_parts * params.res_group_size, params.res_group_size, "mp_map_res");
 	CResultGroupsWriter *rgw = new CResultGroupsWriter(&params, &objects, prefix_name);
 	thread *thr_rgw = new thread(ref(*rgw));
 
@@ -1520,14 +1661,19 @@ bool CMapper::reads_mapping_single_stage(uint32_t stage_major, uint32_t stage_mi
 	}
 
 	uint32_t stage_id = (stage_major << 5) + stage_minor + (sensitive_mode ? (1 << 10) : 0);
+#ifdef COLLECT_STATS
 	objects.running_stats->Register(STAT_TIME_THR_BIN_READER_BASE + stage_id, "Thread time: bin reader " + StageDesc(stage_id), running_stats_t::totals);
 	objects.running_stats->Register(STAT_TIME_THR_BIN_WRITER_BASE + stage_id, "Thread time: bin writer " + StageDesc(stage_id), running_stats_t::totals);
 	objects.running_stats->Register(STAT_TIME_THR_MAPPING_CORE_BASE + stage_id, "Thread time: map. core  " + StageDesc(stage_id), running_stats_t::lists);
+#endif
 
 	watch.StartTimer();
-	stage(stage_major, stage_minor, prev_stage_major, prev_stage_minor, mapping_mode, sensitive_mode);
+	stage(stage_major, stage_minor, prev_stage_major, prev_stage_minor, mapping_mode, sensitive_mode, false);
 	watch.StopTimer();
+
+#ifdef COLLECT_STATS
 	objects.running_stats->AddTotals(STAT_TIME_BASE + (stage_major << 5) + stage_minor, watch.GetElapsedTime());
+#endif
 
 	prev_stage_minor = stage_minor;
 	prev_stage_major = stage_major;
@@ -1549,7 +1695,7 @@ bool CMapper::reads_mapping_single_stage(uint32_t stage_major, uint32_t stage_mi
 }
 
 // ************************************************************************************
-// !!! Works correctly only for upto 4 errors
+//
 bool CMapper::reads_mapping_stage_range(uint32_t stage_major_from, uint32_t stage_minor_from, uint32_t stage_major_to, uint32_t stage_minor_to,
 	mapping_mode_t mapping_mode, bool sensitive_mode)
 {
@@ -1565,8 +1711,10 @@ bool CMapper::reads_mapping_stage_range(uint32_t stage_major_from, uint32_t stag
 
 	uint32_t max_stage = params.max_no_errors;
 
+#ifdef COLLECT_STATS
 	objects.running_stats->Register(STAT_SORTING_TOTAL, "Reads sorting (total)", running_stats_t::totals);
 	objects.running_stats->Register(STAT_TIME_THR_RES_WRITER, "Thread time: results writer      ", running_stats_t::totals);
+#endif
 
 	// Prepare stage-substage descriptions
 	vector<pair<uint32_t, uint32_t>> stages_to_do;
@@ -1623,10 +1771,10 @@ bool CMapper::reads_mapping_stage_range(uint32_t stage_major_from, uint32_t stag
 	// Mapping results queue, thread, and memory pool
 	uint32_t tot_substages = (uint32_t)stages_to_do.size() - 1;
 
-	objects.mp_reads = new CMemoryPool<uchar_t>(params.read_len * params.no_thr_mapping_cores, params.read_len);
+	objects.mp_reads = new CMemoryPool<uchar_t>(params.read_len * params.no_thr_mapping_cores, params.read_len, "mp_reads");
 	objects.q_map_res = new CRegisteringQueue<res_group_t>(params.no_thr_mapping_cores * tot_substages);
 	objects.mp_map_res = new CMemoryPool<uchar_t>(params.no_res_parts * params.res_group_size,
-		params.res_group_size);
+		params.res_group_size, "mp_map_res");
 	CResultGroupsWriter *rgw = new CResultGroupsWriter(&params, &objects, prefix_name);
 	thread *thr_rgw = new thread(ref(*rgw));
 
@@ -1638,14 +1786,20 @@ bool CMapper::reads_mapping_stage_range(uint32_t stage_major_from, uint32_t stag
 		uint32_t prev_stage_minor = (p - 1)->second;
 
 		uint32_t stage_id = (stage_major << 5) + stage_minor;
+
+#ifdef COLLECT_STATS
 		objects.running_stats->Register(STAT_TIME_THR_BIN_READER_BASE + stage_id, "Thread time: bin reader " + StageDesc(stage_id), running_stats_t::totals);
 		objects.running_stats->Register(STAT_TIME_THR_BIN_WRITER_BASE + stage_id, "Thread time: bin writer " + StageDesc(stage_id), running_stats_t::totals);
 		objects.running_stats->Register(STAT_TIME_THR_MAPPING_CORE_BASE + stage_id, "Thread time: map. core  " + StageDesc(stage_id), running_stats_t::lists);
+#endif
 
 		watch.StartTimer();
 		stage(stage_major, stage_minor, prev_stage_major, prev_stage_minor, mapping_mode, sensitive_mode);
 		watch.StopTimer();
+		
+#ifdef COLLECT_STATS
 		objects.running_stats->AddTotals(STAT_TIME_BASE + (stage_major << 5) + stage_minor, watch.GetElapsedTime());
+#endif
 	}
 
 	thr_rgw->join();
@@ -1685,7 +1839,7 @@ bool CMapper::stage(uint32_t stage_major, uint32_t stage_minor, uint32_t prev_st
 	objects.q_bins_write = new CRegisteringQueue<reads_bin_t>(params.no_thr_mapping_cores);
 
 	objects.mem_monitor = new CMemoryMonitor(params.max_mapping_memory);
-	objects.mp_bins_write = new CMemoryPool<uchar_t>(params.no_parts * params.bin_size, params.bin_size);
+	objects.mp_bins_write = new CMemoryPool<uchar_t>(params.no_parts * params.bin_size, params.bin_size, "mp_bins_write");
 
 	// Create bin writer thread
 	CBinsWriter *bw = new CBinsWriter(&params, &objects, prefix_name_curr, stage_id, final_substage);
@@ -1750,7 +1904,7 @@ bool CMapper::prepare_output_files(vector<string> &header_SAM, vector<pair<strin
 		header_SAM.push_back("LN:" + Int2String(p.size + p.no_initial_Ns + p.no_final_Ns));
 		header_SAM.push_back("\n");
 
-		header_BAM.push_back(make_pair(p.name, p.size + p.no_initial_Ns + p.no_final_Ns));
+		header_BAM.push_back(make_pair(p.name, (uint32_t) (p.size + p.no_initial_Ns + p.no_final_Ns)));
 	}
 
 	string cmd = params.command_line;

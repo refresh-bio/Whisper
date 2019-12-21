@@ -23,3 +23,13 @@
 *.user
 *.ipch
 *.tmp
+/src/mapper/unmapped_2243429270_2.fastq
+/src/mapper/unmapped_2243429270_1.fastq
+/src/mapper/unmapped_1705145588_2.fastq
+/src/mapper/unmapped_1705145588_1.fastq
+/src/mapper/unmapped_1613330556_2.fastq
+/src/mapper/unmapped_1613330556_1.fastq
+/src/mapper/unmapped_1181559702_2.fastq
+/src/mapper/unmapped_1181559702_1.fastq
+*.txt
+/src/x64/Release/ref37.whisper_idx.ref_seq_desc

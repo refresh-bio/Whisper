@@ -322,7 +322,7 @@ uint64_t CReadsDeliverer::GetNoReads()
 }
 
 // ************************************************************************************
-bool CReadsDeliverer::Start()
+bool CReadsDeliverer::Start(bool fake_sort)
 {
 	if(!is_valid)
 		return false;
@@ -331,7 +331,7 @@ bool CReadsDeliverer::Start()
 		decompress_reads();
 
 	if(!is_sorted)
-		sort_reads();
+		sort_reads(fake_sort);
 
 	pos = 0;
 
@@ -490,7 +490,7 @@ void CReadsDeliverer::decompress_reads()
 }
 
 // ************************************************************************************
-void CReadsDeliverer::sort_reads()
+void CReadsDeliverer::sort_reads(bool fake_sort)
 {
 	uchar_t** ptrs = new uchar_t*[bin.count];			// pointers to reads
 	uchar_t* curr_ptr = bin.data;
@@ -527,114 +527,163 @@ void CReadsDeliverer::sort_reads()
 	CThreadWatch thr_watch;
 	thr_watch.StartTimer();
 
-	// Sort reads of contant lengths 
-	if(constant_read_len || (max_read_len == min_read_len))
+	if (!fake_sort)
 	{
-		if(start_pos == 0)				// substage x:0
-			sort(ptrs, ptrs+bin.count, [&](uchar_t* p, uchar_t* q){
-				return MEMCMP(p+start_offset, q+start_offset, packed_len) < 0;
+		// Sort reads of contant lengths 
+		if (constant_read_len || (max_read_len == min_read_len))
+		{
+			if (start_pos == 0)				// substage x:0
+				sort(ptrs, ptrs + bin.count, [&](uchar_t* p, uchar_t* q) {
+				return MEMCMP(p + start_offset, q + start_offset, packed_len) < 0;
 			});
-		else if(start_pos % 2 == 0)		// data to sort start at byte boundary
-			sort(ptrs, ptrs+bin.count, [&](uchar_t* p, uchar_t* q){
-				int r = MEMCMP(p+start_offset, q+start_offset, sorting_part_len);
-				if(!r)
-					r = MEMCMP(p+data_offset, q+data_offset, packed_len);
+			else if (start_pos % 2 == 0)		// data to sort start at byte boundary
+				sort(ptrs, ptrs + bin.count, [&](uchar_t* p, uchar_t* q) {
+				int r = MEMCMP(p + start_offset, q + start_offset, sorting_part_len);
+				if (!r)
+					r = MEMCMP(p + data_offset, q + data_offset, packed_len);
 				return r < 0;
 			});
-		else						// data to sort start inside a byte
-			sort(ptrs, ptrs+bin.count, [&](uchar_t* p, uchar_t* q){
-				if((p[start_offset] & 0xf) != (q[start_offset] & 0xf))
+			else						// data to sort start inside a byte
+				sort(ptrs, ptrs + bin.count, [&](uchar_t* p, uchar_t* q) {
+				if ((p[start_offset] & 0xf) != (q[start_offset] & 0xf))
 					return (p[start_offset] & 0xf) < (q[start_offset] & 0xf);
-				
-				int r = MEMCMP(p+start_offset+1, q+start_offset+1, sorting_part_len);
-				if(!r)
-					r = MEMCMP(p+data_offset, q+data_offset, packed_len);
+
+				int r = MEMCMP(p + start_offset + 1, q + start_offset + 1, sorting_part_len);
+				if (!r)
+					r = MEMCMP(p + data_offset, q + data_offset, packed_len);
 				return r < 0;
-		});
-	}
-	// Sort reads of different lengths 
-	else
-	{
-		uint32_t min_packed_len = PACKED_READ_LEN(min_read_len);
+			});
+		}
+		// Sort reads of different lengths 
+		else
+		{
+			/*		uint32_t min_packed_len = PACKED_READ_LEN(min_read_len);
 
-		if(start_pos == 0)				// substage x:0
-			sort(ptrs, ptrs+bin.count, [&](uchar_t* p, uchar_t* q){
-				int r = MEMCMP(p+start_offset, q+start_offset, min_packed_len);
+					if(start_pos == 0)				// substage x:0
+						sort(ptrs, ptrs+bin.count, [&](uchar_t* p, uchar_t* q){
+							int r = MEMCMP(p+start_offset, q+start_offset, min_packed_len);
 
-				if(r)
+							if(r)
+								return r < 0;
+
+							uint32_t p_len, q_len;
+							LoadUInt2(p+read_id_len, p_len);
+							LoadUInt2(q+read_id_len, q_len);
+							packed_len = (uint32_t) PACKED_READ_LEN(MIN(p_len, q_len));
+
+							if(min_packed_len != packed_len)
+							{
+								r = MEMCMP(p+start_offset+min_packed_len, q+start_offset+min_packed_len, packed_len-min_packed_len);
+								if(r)
+									return r < 0;
+							}
+
+							return p_len < q_len;
+						});
+					else if(start_pos % 2 == 0)		// data to sort start at byte boundary
+						sort(ptrs, ptrs+bin.count, [&](uchar_t* p, uchar_t* q){
+							int r = MEMCMP(p+start_offset, q+start_offset, sorting_part_len);
+							if(r)
+								return r < 0;
+
+							r = MEMCMP(p+data_offset, q+data_offset, min_packed_len);
+							if(r)
+								return r < 0;
+
+							uint32_t p_len, q_len;
+							LoadUInt2(p+read_id_len, p_len);
+							LoadUInt2(q+read_id_len, q_len);
+							packed_len = (uint32_t) PACKED_READ_LEN(MIN(p_len, q_len));
+
+							if(min_packed_len != packed_len)
+							{
+								r = MEMCMP(p+data_offset+min_packed_len, q+data_offset+min_packed_len, packed_len-min_packed_len);
+								if(r)
+									return r < 0;
+							}
+
+							return p_len < q_len;
+						});
+					else						// data to sort start inside a byte
+						sort(ptrs, ptrs+bin.count, [&](uchar_t* p, uchar_t* q){
+							if((p[start_offset] & 0xf) != (q[start_offset] & 0xf))
+								return (p[start_offset] & 0xf) < (q[start_offset] & 0xf);
+
+							int r = MEMCMP(p+start_offset+1, q+start_offset+1, sorting_part_len);
+							if(r)
+								return r < 0;
+
+							r = MEMCMP(p+data_offset, q+data_offset, min_packed_len);
+							if(r)
+								return r < 0;
+
+							uint32_t p_len, q_len;
+							LoadUInt2(p+read_id_len, p_len);
+							LoadUInt2(q+read_id_len, q_len);
+							packed_len = (uint32_t) PACKED_READ_LEN(MIN(p_len, q_len));
+
+							if(min_packed_len != packed_len)
+							{
+								r = MEMCMP(p+data_offset+min_packed_len, q+data_offset+min_packed_len, packed_len-min_packed_len);
+								if(r)
+									return r < 0;
+							}
+
+							return p_len < q_len;
+					});*/
+
+			if (start_pos % 2 == 0)		// data to sort start at byte boundary
+				sort(ptrs, ptrs + bin.count, [&](uchar_t* p, uchar_t* q) {
+				int r = MEMCMP(p + start_offset, q + start_offset, sorting_part_len);
+				if (r)
 					return r < 0;
 
 				uint32_t p_len, q_len;
-				LoadUInt2(p+read_id_len, p_len);
-				LoadUInt2(q+read_id_len, q_len);
-				packed_len = (uint32_t) PACKED_READ_LEN(MIN(p_len, q_len));
+				LoadUInt2(p + read_id_len, p_len);
+				LoadUInt2(q + read_id_len, q_len);
+				packed_len = (uint32_t)PACKED_READ_LEN(MIN(p_len, q_len));
 
-				if(min_packed_len != packed_len)
+				if (sorting_part_len != packed_len)
 				{
-					r = MEMCMP(p+start_offset+min_packed_len, q+start_offset+min_packed_len, packed_len-min_packed_len);
-					if(r)	
+					r = MEMCMP(p + data_offset + sorting_part_len, q + data_offset + sorting_part_len, packed_len - sorting_part_len);
+					if (r)
 						return r < 0;
 				}
 
 				return p_len < q_len;
 			});
-		else if(start_pos % 2 == 0)		// data to sort start at byte boundary
-			sort(ptrs, ptrs+bin.count, [&](uchar_t* p, uchar_t* q){
-				int r = MEMCMP(p+start_offset, q+start_offset, sorting_part_len);
-				if(r)
-					return r < 0;
-
-				r = MEMCMP(p+data_offset, q+data_offset, min_packed_len);
-				if(r)
-					return r < 0;
-
-				uint32_t p_len, q_len;
-				LoadUInt2(p+read_id_len, p_len);
-				LoadUInt2(q+read_id_len, q_len);
-				packed_len = (uint32_t) PACKED_READ_LEN(MIN(p_len, q_len));
-
-				if(min_packed_len != packed_len)
-				{
-					r = MEMCMP(p+data_offset+min_packed_len, q+data_offset+min_packed_len, packed_len-min_packed_len);
-					if(r)
-						return r < 0;
-				}
-
-				return p_len < q_len;
-			});
-		else						// data to sort start inside a byte
-			sort(ptrs, ptrs+bin.count, [&](uchar_t* p, uchar_t* q){
-				if((p[start_offset] & 0xf) != (q[start_offset] & 0xf))
+			else						// data to sort start inside a byte
+				sort(ptrs, ptrs + bin.count, [&](uchar_t* p, uchar_t* q) {
+				if ((p[start_offset] & 0xf) != (q[start_offset] & 0xf))
 					return (p[start_offset] & 0xf) < (q[start_offset] & 0xf);
-				
-				int r = MEMCMP(p+start_offset+1, q+start_offset+1, sorting_part_len);
-				if(r)
-					return r < 0;
 
-				r = MEMCMP(p+data_offset, q+data_offset, min_packed_len);
-				if(r)
+				int r = MEMCMP(p + start_offset + 1, q + start_offset + 1, sorting_part_len);
+				if (r)
 					return r < 0;
 
 				uint32_t p_len, q_len;
-				LoadUInt2(p+read_id_len, p_len);
-				LoadUInt2(q+read_id_len, q_len);
-				packed_len = (uint32_t) PACKED_READ_LEN(MIN(p_len, q_len));
+				LoadUInt2(p + read_id_len, p_len);
+				LoadUInt2(q + read_id_len, q_len);
+				packed_len = (uint32_t)PACKED_READ_LEN(MIN(p_len, q_len));
 
-				if(min_packed_len != packed_len)
+				if (sorting_part_len != packed_len)
 				{
-					r = MEMCMP(p+data_offset+min_packed_len, q+data_offset+min_packed_len, packed_len-min_packed_len);
-					if(r)
+					r = MEMCMP(p + data_offset + sorting_part_len, q + data_offset + sorting_part_len, packed_len - sorting_part_len);
+					if (r)
 						return r < 0;
 				}
 
 				return p_len < q_len;
-		});
+			});
+		}
 	}
 
 	thr_watch.StopTimer();
 
+#ifdef COLLECT_STATS
 	running_stats->AddValues(STAT_SORTING_TOTAL, thr_watch.GetElapsedTime());
 	running_stats->AddValues(STAT_SORTING_BASE+stage_id, thr_watch.GetElapsedTime());
+#endif
 
 	sorted_ptrs = ptrs;
 
@@ -697,7 +746,7 @@ bool CReadsSplitter::Process(uchar_t *_block, uint32_t _block_size, read_id_t id
 	while(get_seq(seq, seq_size))
 	{
 		// Calculation of bin id.
-		// In a case of any N i prefix, the bin_id is the maximal value
+		// In a case of any N in prefix, the bin_id is the maximal value
 		uint32_t bin_id = 0;
 		if(seq_size < bin_prefix)
 			bin_id = no_bins-1;

@@ -11,7 +11,9 @@
 
 
 #include "LevMyers128.h"
+#pragma warning (disable: 26495 26451 6385)
 #include "vector_utils.h"
+#pragma warning (default: 26495 26451 6385)
 #include "../common/types.h"
 
 #include <iostream>
@@ -48,11 +50,19 @@ void LevMyers128<instruction_set>::reallocBuffers(uint32_t _max_query_len, uint3
 	LevMyers64::reallocBuffers(_max_query_len, _max_text_len, rounding);
 
 	bp128_n_words = (this->max_query_len + 128) / 128;
-	bp128_M = (bp128_t**)realloc(bp128_M, sizeof(bp128_t*) * (max_text_len + 2 + bp128_n_words));
-	bp128_raw_M = (bp128_t*)alloc_aligned(bp128_raw_ptr_M, (this->max_text_len + 2 + bp128_n_words) * bp128_n_words * sizeof(bp128_t), sizeof(simd128_t));
+
+	if (auto t = (bp128_t**)realloc(bp128_M, (uint64_t) sizeof(bp128_t*) * (max_text_len + 2ull + bp128_n_words)))
+		bp128_M = t;
+	else
+		exit(1);
+
+	if (auto t = (bp128_t*)alloc_aligned(bp128_raw_ptr_M, (uint64_t)(this->max_text_len + 2ull + bp128_n_words) * bp128_n_words * sizeof(bp128_t), sizeof(simd128_t)))
+		bp128_raw_M = t;
+	else
+		exit(1);
 
 	for (uint32_t i = 0; i < this->max_text_len + 2; ++i)
-		bp128_M[i] = &bp128_raw_M[i * bp128_n_words];
+		bp128_M[i] = &bp128_raw_M[(uint64_t) i * bp128_n_words];
 
 	for (uint32_t i = 0; i < bp128_n_words; ++i)
 	{
@@ -64,9 +74,8 @@ void LevMyers128<instruction_set>::reallocBuffers(uint32_t _max_query_len, uint3
 		bp128_M[0][i].D0 = ~(0ull);
 	}
 
-	genome_prefetch = (uchar_t*)realloc(genome_prefetch, sizeof(uchar_t) * (std::max(max_query_len, this->max_text_len) + 5)); // fixme: why + 5?
+	genome_prefetch = (uchar_t*)realloc(genome_prefetch, (uint64_t) sizeof(uchar_t) * (std::max(max_query_len, this->max_text_len) + 8ull)); // fixme: why + 5?
 }
-
 
 // ************************************************************************************
 template <instruction_set_t instruction_set>
@@ -74,10 +83,18 @@ bool LevMyers128<instruction_set>::dynamicProgramming(
 	ref_pos_t ref_pos, uint32_t max_distance_in_ref, uint32_t max_mate_edit_distance, ref_pos_t &pos, uint32_t &edit_distance)
 {
 	uint32_t j;
-	uint32_t red_m = (seq_len - 1) % 128;
+	uint32_t seq_len_m1 = seq_len - 1;
+	uint32_t red_m = (seq_len_m1) % 128;
+	uint64_t red_m_mask = 1ull << (red_m % 64);
+	uint64_t red_m_word = red_m / 64;
+
+	uint32_t word_num = seq_len_m1 / 64;
 	uint32_t min_ed = seq_len;
 	uint32_t min_ed_pos = 0;
 	uint32_t curr_ed = seq_len;// - bp128_n_words + 1;
+
+	int middle_point_in_ref = (max_distance_in_ref + seq_len) / 2;
+	int best_dist_from_middle = max_distance_in_ref + seq_len;		// large value
 
 	if (max_distance_in_ref == 0) {
 		max_distance_in_ref = max_text_len;
@@ -85,8 +102,8 @@ bool LevMyers128<instruction_set>::dynamicProgramming(
 	}
 
 	if (max_distance_in_ref > max_text_len) {
+		throw std::runtime_error("reallocation needed: max_query_len: " + to_string(max_text_len) + " max_dist: " + to_string(max_distance_in_ref));
 		reallocBuffers(max_query_len, max_distance_in_ref, 2);
-		throw std::runtime_error("reallocation needed");
 	}
 
 	bp128_t * __restrict curr_bp_M = bp128_M[1];
@@ -98,14 +115,7 @@ bool LevMyers128<instruction_set>::dynamicProgramming(
 	uint32_t text_len_div2 = (max_distance_in_ref + 3) / 2;
 
 	*ptr++ = 7;			// No symbol
-	if (ref_pos & 1)
-		*ptr++ = *genome_ptr++ & 0x0f;
-	for (uint32_t i = 0; i < text_len_div2; ++i)
-	{
-		*ptr++ = *genome_ptr >> 4;
-		*ptr++ = *genome_ptr++ & 0x0f;
-	}
-
+	PrefetchDecompressed128<instruction_set>(ptr, genome_ptr, max_distance_in_ref + 3, ref_pos & 1);
 	ptr = genome_prefetch;
 
 	simd128_t HN = bp128_M[0][0].HN;
@@ -123,8 +133,8 @@ bool LevMyers128<instruction_set>::dynamicProgramming(
 		uint64_t X0 = bp_PM[*ptr][0];
 		simd128_t X(X0, X1);
 
-		simd128_t permshift_HN = permute2uq<-1, 0>(HN);
-		simd128_t permshift_HP = permute2uq<-1, 0>(HP);
+		simd128_t permshift_HN = permute2<-1, 0>(HN);
+		simd128_t permshift_HP = permute2<-1, 0>(HP);
 		permshift_HN >>= 63;
 		permshift_HP >>= 63;
 
@@ -163,24 +173,50 @@ bool LevMyers128<instruction_set>::dynamicProgramming(
 
 		curr_bp_M++;
 
-		if (HN.get_bit(red_m))
+//		if (HN.get_bit(red_m))
+		if (HN[red_m_word] & red_m_mask)
 		{
 			if (--curr_ed < min_ed)
 			{
 				min_ed = curr_ed;
-				min_ed_pos = j - (seq_len / 64);
+				min_ed_pos = j - word_num;
+				best_dist_from_middle = abs((int) j - middle_point_in_ref);
 			}
 			else if (curr_ed == min_ed)
-				if (min_ed_pos + 1 == j - (seq_len / 64)) // prefer SNP over INDEL
-					min_ed_pos = j - (seq_len / 64);
+			{
+/*				if (D0.get_bit(red_m))
+				{
+					int dist_from_middle = abs((int)j - middle_point_in_ref);
+					if (dist_from_middle < best_dist_from_middle)
+					{
+						best_dist_from_middle = dist_from_middle;
+						min_ed_pos = j - word_num;
+					}
+				}
+	*/			
+				if (min_ed_pos + 1 == j - word_num) // prefer SNP over INDEL
+					min_ed_pos = j - word_num;
+			}
 		}
 		else
 		{
-			if (HP.get_bit(red_m))
+//			if (HP.get_bit(red_m))
+			if (HP[red_m_word] & red_m_mask)
 				curr_ed++;
 			else if (curr_ed == min_ed)
-				if (min_ed_pos + 1 == j - (seq_len / 64))
-					min_ed_pos = j - (seq_len / 64);
+			{
+				if (min_ed_pos + 1 == j - word_num)
+					min_ed_pos = j - word_num;
+/*				if (D0.get_bit(red_m))
+				{
+					int dist_from_middle = abs((int)j - middle_point_in_ref);
+					if (dist_from_middle < best_dist_from_middle)
+					{
+						best_dist_from_middle = dist_from_middle;
+						min_ed_pos = j - word_num;
+					}
+				}*/
+			}
 
 			if (curr_ed > ed_threshold)
 				break;
@@ -210,6 +246,8 @@ ref_pos_t LevMyers128<instruction_set>::getExtCigar(uchar_t *ext_cigar, uchar_t*
 	const char *decode = "ACGTNNXX";
 
 	uint32_t h_val, v_val, d_val, c_val;
+	matrix_dir_t prev_dir = matrix_dir_t::D;
+	matrix_dir_t curr_dir;
 
 	c_val = edit_dist;
 	affine_score = 0;
@@ -218,83 +256,103 @@ ref_pos_t LevMyers128<instruction_set>::getExtCigar(uchar_t *ext_cigar, uchar_t*
 	ext_cigar[0] = 0;
 	string_reader_t quality_reader(quality, seq_len, dir);
 
-	while (read_pos && pos) {
-		if (tmp_read_sequence[read_pos] == tmp_ref_sequence[pos - 1]) {
-			// match
-			inIndel = false;
-			affine_score += scoring.match; //quality_reader[read_pos];
-			--read_pos;
-			--pos;
-			ext_cigar[cigar_pos++] = '.';
-		}
-		else {
-			uint32_t word_no = (read_pos - 1) / 64;
-			uint64_t word_mask = 1ull << ((read_pos - 1) % 64);
+	while (read_pos&& pos) {
+		uint32_t word_no = (read_pos - 1) / 64;
+		uint64_t word_mask = 1ull << ((read_pos - 1) % 64);
 
-			bp128_t word128 = *bp128_M[pos + word_no];
-			
-			d_val = h_val = v_val = c_val;
+		bp128_t word128 = *bp128_M[pos + word_no];
 
-			if (!(word128.D0.extract(word_no) & word_mask)) { --d_val; }
-			if (word128.HP.extract(word_no) & word_mask) { --h_val; }
-			if (word128.HN.extract(word_no) & word_mask) { ++h_val; }
-			if (word128.VP.extract(word_no) & word_mask) { --v_val; }
-			if (word128.VN.extract(word_no) & word_mask) { ++v_val; }
+		d_val = h_val = v_val = c_val;
 
-			if (d_val <= h_val && d_val <= v_val) {
-				// mismatch
-				affine_score += scoring.mismatch; //quality_reader[read_pos];
-				inIndel = false;
-				++num_events;
+		if (!(word128.D0.extract(word_no) & word_mask)) { --d_val; }
+		if (word128.HP.extract(word_no) & word_mask) { --h_val; }
+		if (word128.HN.extract(word_no) & word_mask) { ++h_val; }
+		if (word128.VP.extract(word_no) & word_mask) { --v_val; }
+		if (word128.VN.extract(word_no) & word_mask) { ++v_val; }
 
-				ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos - 1]];
-				--read_pos;
-				--pos;
-				c_val = d_val;
-			}
-			else if (h_val <= v_val) {
-				// deletion
-				if (inIndel) {
-					affine_score += scoring.gap_extend;
-				}
-				else {
-					affine_score += scoring.gap_open;
-					++num_events;
-					inIndel = true;
-				}
+		int match_cost = (tmp_read_sequence[read_pos] != tmp_ref_sequence[pos - 1]);
 
-				ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos - 1]];
-				ext_cigar[cigar_pos++] = '^';
-				--pos;
-				c_val = h_val;
+		bool can_come_from_H = (h_val + 1 == c_val);
+		bool can_come_from_V = (v_val + 1 == c_val);
+		bool can_come_from_D = (d_val + match_cost == c_val);
+
+		if (can_come_from_D && (
+			(prev_dir == matrix_dir_t::D) ||
+			(prev_dir == matrix_dir_t::H && !can_come_from_H) ||
+			(prev_dir == matrix_dir_t::V && !can_come_from_V)))
+			curr_dir = matrix_dir_t::D;
+		else if (can_come_from_H && (
+			(prev_dir == matrix_dir_t::H) ||
+			(prev_dir == matrix_dir_t::D && !can_come_from_D) ||
+			(prev_dir == matrix_dir_t::V && !can_come_from_V)))
+			curr_dir = matrix_dir_t::H;
+		else
+			curr_dir = matrix_dir_t::V;
+
+		if (curr_dir == matrix_dir_t::D)
+		{
+			if (tmp_read_sequence[read_pos] == tmp_ref_sequence[pos - 1]) {
+				// match
+				affine_score += scoring.match; //quality_reader[read_pos];
+				ext_cigar[cigar_pos++] = '.';
 			}
 			else {
-				// insertion
-				if (inIndel) {
-					affine_score += scoring.gap_extend;
-				}
-				else {
-					affine_score += scoring.gap_open;
-					++num_events;
-					inIndel = true;
-				}
-
-				ext_cigar[cigar_pos++] = decode[tmp_read_sequence[read_pos]];
-				ext_cigar[cigar_pos++] = '#';
-				--read_pos;
-				c_val = v_val;
+				// mismatch
+				affine_score += scoring.mismatch; //quality_reader[read_pos];
+				ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos - 1]];
 			}
+
+			inIndel = false;
+			--read_pos;
+			--pos;
+			c_val = d_val;
 		}
+		else if (curr_dir == matrix_dir_t::H)
+		{
+			// deletion
+			if (inIndel) {
+				affine_score += scoring.gap_del_extend;
+			}
+			else {
+				affine_score += scoring.gap_del_open;
+				++num_events;
+				inIndel = true;
+			}
+
+			ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos - 1]];
+			ext_cigar[cigar_pos++] = '^';
+			--pos;
+			c_val = h_val;
+		}
+		else
+		{
+			// insertion
+			if (inIndel) {
+				affine_score += scoring.gap_ins_extend;
+			}
+			else {
+				affine_score += scoring.gap_ins_open;
+				++num_events;
+				inIndel = true;
+			}
+
+			ext_cigar[cigar_pos++] = decode[tmp_read_sequence[read_pos]];
+			ext_cigar[cigar_pos++] = '#';
+			--read_pos;
+			c_val = v_val;
+		}
+
+		prev_dir = curr_dir;
 	}
 
 	while (read_pos)
 	{
 		// insertion
 		if (inIndel) {
-			affine_score += scoring.gap_extend;
+			affine_score += scoring.gap_ins_extend;
 		}
 		else {
-			affine_score += scoring.gap_open;
+			affine_score += scoring.gap_ins_open;
 			++num_events;
 			inIndel = true;
 		}

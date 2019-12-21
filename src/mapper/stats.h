@@ -29,7 +29,7 @@ enum class running_stats_t {totals, averages, lists};
 // ************************************************************************************
 class CRunningStats 
 {
-	mutable mutex mtx;							// The mutex to synchronise on
+	mutable mutex mtx;							
 
 	map<uint32_t, pair<string, running_stats_t>> descriptions;
 	map<string, pair<uint32_t, running_stats_t>> inv_descriptions;

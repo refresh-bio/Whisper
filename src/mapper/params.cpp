@@ -10,7 +10,7 @@
 // *******************************************************************************************
 
 
-#include "../common/params.h"
+#include "params.h"
 
 ostream& operator<<(ostream &out, const CParams &p)
 {
@@ -23,10 +23,15 @@ ostream& operator<<(ostream &out, const CParams &p)
 	out << "constant_read_len             : " << p.constant_read_len << endl;
 	out << "developer_mode                : " << p.developer_mode << endl;
 	out << "enable_boundary_clipping      : " << p.enable_boundary_clipping << endl;
-	out << "error_score                   : " << p.error_score << endl;
+	out << "enable_paired_clipping		  : " << p.enable_paired_clipping << endl;
+//	out << "error_score                   : " << p.error_score << endl;
 	out << "filter                        : " << p.filter << endl;
-	out << "gap_open                      : " << p.gap_open << endl;
-	out << "gap_extend                    : " << p.gap_extend << endl;
+//	out << "gap_open                      : " << p.gap_open << endl;
+//	out << "gap_extend                    : " << p.gap_extend << endl;
+	out << "gap_ins_open                  : " << p.gap_ins_open << endl;
+	out << "gap_ins_extend                : " << p.gap_ins_extend << endl;
+	out << "gap_del_open                  : " << p.gap_del_open << endl;
+	out << "gap_del_extend                : " << p.gap_del_extend << endl;
 	out << "gzipped_SAM_level             : " << p.gzipped_SAM_level << endl;
 	out << "high_confidence_sigmas        : " << p.high_confidence_sigmas << endl;
 	out << "hit_merging_threshold         : " << p.hit_merging_threshold << endl;
@@ -52,6 +57,7 @@ ostream& operator<<(ostream &out, const CParams &p)
 	out << "mapq_mult                     : " << p.mapq_mult << endl;
 	out << "mask_low_quality_bases        : " << p.mask_low_quality_bases << endl;
 	out << "match_score                   : " << p.match_score << endl;
+	out << "max_approx_indel_len          : " << p.max_approx_indel_len << endl;
 	out << "max_bin_part_size             : " << p.max_bin_part_size << endl;
 	out << "max_cigar_len                 : " << p.max_cigar_len << endl;
 	out << "max_fastq_rec_length          : " << p.max_fastq_rec_length << endl;
@@ -66,6 +72,7 @@ ostream& operator<<(ostream &out, const CParams &p)
 	out << "max_reads_compression         : " << p.max_reads_compression << endl;
 	out << "max_res_dev_memory            : " << p.max_res_dev_memory << endl;
 	out << "max_total_memory              : " << p.max_total_memory << endl;
+	out << "min_approx_indel_len          : " << p.min_approx_indel_len << endl;
 	out << "min_no_free_group_parts       : " << p.min_no_free_group_parts << endl;
 	out << "min_no_free_parts             : " << p.min_no_free_parts << endl;
 	out << "min_read_len                  : " << p.min_read_len << endl;

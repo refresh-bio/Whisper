@@ -9,7 +9,6 @@
 // License : GNU GPL 3
 // *******************************************************************************************
 
-
 #include "mapping_core.h"
 #include "../libs/asmlib.h"
 #include "../common/utils.h"
@@ -94,6 +93,7 @@ void CMappingCore::adjust_substr_pos_arr()
 				right -= substr_len;
 			}
 		}
+
 		reverse(substr_pos_all_lengths[substr_len].begin(), substr_pos_all_lengths[substr_len].end());
 
 		substr_pos_in_text_all_lengths.push_back(vector<int32_t>());
@@ -120,12 +120,12 @@ void CMappingCore::adjust_substr_pos_arr()
 				auto p = find(substr_pos_in_text_all_lengths[substr_len].begin(), substr_pos_in_text_all_lengths[substr_len].end(), pos_in_text);
 				if (p == substr_pos_in_text_all_lengths[substr_len].end())
 				{
-					substr_pos_mapping_all_lengths[substr_len].push_back(make_pair(j, substr_pos_in_text_all_lengths[substr_len].size()));
+					substr_pos_mapping_all_lengths[substr_len].push_back(make_pair(j, (uint32_t) substr_pos_in_text_all_lengths[substr_len].size()));
 					substr_pos_in_text_all_lengths[substr_len].push_back(pos_in_text);
 				}
 				else
 				{
-					substr_pos_mapping_all_lengths[substr_len].push_back(make_pair(j, p - substr_pos_in_text_all_lengths[substr_len].begin()));
+					substr_pos_mapping_all_lengths[substr_len].push_back(make_pair(j, (uint32_t) (p - substr_pos_in_text_all_lengths[substr_len].begin())));
 				}
 			}
 		}
@@ -225,6 +225,7 @@ uint32_t CMappingCore::get_substring_value(uint32_t substring_length, int32_t st
 	if (ref_offset & 1)
 	{
 		substring_value = dense_symbols[LO_NIBBLE(*ref_ptr_pos++)];
+
 		switch ((substring_length - 1) / 2)
 		{
 		case 3:

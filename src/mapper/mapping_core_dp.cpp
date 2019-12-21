@@ -17,8 +17,6 @@
 #define GET_CHAR_FROM_PATTERN(i, pattern_ptr) ((i) & 1 ? LO_NIBBLE(pattern_ptr[(i)>>1]) : HI_NIBBLE(pattern_ptr[(i)>>1]))
 #define GET_CHAR_FROM_GENOME(j) ((left_end_index_in_gen + (j)) & 1 ? LO_NIBBLE(ref_ptr[(left_end_index_in_gen+(j))>>1]) : HI_NIBBLE(ref_ptr[(left_end_index_in_gen+(j))>>1]))
 
-//#define LEV_MYERS_ASSERTIONS
-
 //**********************************************************************************************************
 //
 //**********************************************************************************************************
@@ -28,7 +26,12 @@ uint32_t CMappingCore::search_in_malicious_group_with_DP(uchar_t* pattern_ptr, u
 	bool dir_gen_flag, uint32_t max_mismatches,
 	uint32_t sub_SA_index_offs)
 {
-	if (sensitive_mode)
+	// Do not search in maliclious group in sensitive mode - performance reason
+	if (sensitive_mode)					
+		return max_mismatches + 1;
+
+	// Do not search in malicious group for too short read (handling maliciuos groups requires read to be of length at least min_read_len)
+	if(pattern_len < min_read_len)
 		return max_mismatches + 1;
 
 	vector<uint32_t> *sum_of_localizations;
@@ -117,12 +120,8 @@ uint32_t CMappingCore::search_in_malicious_group_with_DP(uchar_t* pattern_ptr, u
 	vector<uint32_t>::iterator q = list_merger(in_list_desc, req_occ, list_merger_tmp, (*sum_of_localizations).begin());
 
 	if (max_mismatches >= lev_alg_thr)
-	{
-#ifdef LEV_MYERS_ASSERTIONS
-		edit_dist->LevMyers_PP(pattern_ptr, pattern_len, genome_t::direct);		// Direction is always direct as read is already reverse-complemented (if dir_falg is false)
-#endif
 		levMyers->preprocess(pattern_ptr, pattern_len, genome_t::direct);
-	}
+
 	for (auto p = (*sum_of_localizations).begin(); p != q; ++p)
 	{
 		//-------------------------------DIR GENOME ----------------------------------------
@@ -134,25 +133,23 @@ uint32_t CMappingCore::search_in_malicious_group_with_DP(uchar_t* pattern_ptr, u
 					4 * max_mismatches))
 				{
 					ref_pos_t ref_pos;
-					if (max_mismatches >= lev_alg_thr) {
+					if (max_mismatches >= lev_alg_thr)
 						levMyers->dynamicProgramming(sub_SA[*p] - start_pos - max_mismatches, pattern_len + 2 * max_mismatches, max_mismatches, ref_pos, cur_match);
-#ifdef LEV_MYERS_ASSERTIONS
-						uint32_t ref_pos2, cur_match2;
-						edit_dist->LevMyers(sub_SA[*p] - start_pos - max_mismatches, pattern_len + 2 * max_mismatches, max_mismatches, ref_pos2, cur_match2);
-						ASSERT((ref_pos == ref_pos2) && (cur_match == cur_match2), "CMappingCore::search_in_malicious_group_with_DP() error!");
-#endif
-					}
 					else
 						cur_match = edit_dist->LevDiag(pattern_ptr, pattern_len, sub_SA[*p], start_pos, end_pos, max_mismatches, 1);
 
+#ifdef COLLECT_STATS
 					no_of_CF_accepted_in_malicious_group++;
 					if (cur_match <= max_mismatches)
 						no_of_Lev_positive++;
+#endif
 				}
 				else
 				{
 					cur_match = max_mismatches + 1;
+#ifdef COLLECT_STATS
 					no_of_CF_discarded_in_malicious_group++;
+#endif
 				}
 			}
 		}
@@ -164,25 +161,23 @@ uint32_t CMappingCore::search_in_malicious_group_with_DP(uchar_t* pattern_ptr, u
 				if (test_CF_128b_SSE_difference(CF_value_SSE_for_a_rc_pattern, CF_vector_128b_SSE_rc_gen[*p + sub_SA_index_offs], 4 * max_mismatches))
 				{
 					ref_pos_t ref_pos;
-					if (max_mismatches >= lev_alg_thr) {
+					if (max_mismatches >= lev_alg_thr)
 						levMyers->dynamicProgramming(ref_size - sub_SA[*p] - pattern_len + start_pos - max_mismatches, pattern_len + 2 * max_mismatches, max_mismatches, ref_pos, cur_match);
-#ifdef LEV_MYERS_ASSERTIONS
-						uint32_t ref_pos2, cur_match2;
-						edit_dist->LevMyers(ref_size - sub_SA[*p] - pattern_len + start_pos - max_mismatches, pattern_len + 2 * max_mismatches, max_mismatches, ref_pos2, cur_match2);
-						ASSERT(ref_pos == ref_pos2 && cur_match == cur_match2, "CMappingCore::search_in_malicious_group_with_DP() error!");
-#endif
-					}
 					else
 						cur_match = edit_dist->LevDiag(pattern_ptr, pattern_len, sub_SA[*p], pattern_len - end_pos, pattern_len - start_pos, max_mismatches, 0);
 
+#ifdef COLLECT_STATS
 					no_of_CF_accepted_in_malicious_group++;
 					if (cur_match <= max_mismatches)
 						no_of_Lev_positive++;
+#endif
 				}
 				else
 				{
 					cur_match = max_mismatches + 1;
+#ifdef COLLECT_STATS
 					no_of_CF_discarded_in_malicious_group++;
+#endif
 				}
 			}
 		}
@@ -194,9 +189,11 @@ uint32_t CMappingCore::search_in_malicious_group_with_DP(uchar_t* pattern_ptr, u
 		if (cur_match <= max_mismatches)
 		{
 			if (dir_gen_flag)
-				dir_match_positions.push_back(make_pair(sub_SA[*p] - CUR_OFFSET, cur_match));
+				dir_match_positions.push_back(candidate_mapping_t::construct<mapping_type_t::lev>(sub_SA[*p] - CUR_OFFSET, 
+					genome_t::direct, cur_match));
 			else
-				rc_match_positions.push_back(make_pair(ref_size - (sub_SA[*p] - CUR_OFFSET) - 1, cur_match));
+				rc_match_positions.push_back(candidate_mapping_t::construct<mapping_type_t::lev>(ref_size - (sub_SA[*p] - CUR_OFFSET) - 1, 
+					genome_t::rev_comp, cur_match));
 		}
 	}
 
@@ -242,8 +239,7 @@ void CMappingCore::build_aux_structures_for_DP(uint32_t* sub_SA, uint32_t sub_si
 		identical_sequences_dir.assign(sub_size, 0);
 	else
 		identical_sequences_rc.assign(sub_size, 0);
-
-
+	
 	for (uint32_t i = 0; i < sub_size; i++) //count the occurrences of individual substring_values
 	{
 		//------------------------------------------------------------------------------------------------
@@ -367,9 +363,7 @@ void CMappingCore::calculate_CF_128b_SEE_for_dir_and_rc_gen(uint32_t fixedLeft, 
 		uint32_t len_in_chars = fixedLeft;
 
 		if ((left_end & 1) == 0)
-		{
 			T_ptr = ref_ptr + (left_end >> 1);
-		}
 		else
 		{
 			T_ptr = ref_ptr + (left_end >> 1);
@@ -405,9 +399,7 @@ void CMappingCore::calculate_CF_128b_SEE_for_dir_and_rc_gen(uint32_t fixedLeft, 
 		left_end += fixedRight;
 
 		if ((left_end & 1) == 0)
-		{
 			T_ptr = ref_ptr + (left_end >> 1);
-		}
 		else
 		{
 			T_ptr = ref_ptr + (left_end >> 1);
@@ -488,16 +480,6 @@ void CMappingCore::calculate_CF_128b_SSE_for_a_pattern(uchar_t *pattern, uchar_t
 		if ((len_in_chars & 1) == 0)
 			CF_value_SSE = add_saturated(CF_value_SSE, CF_SSE_lut[*p++]);
 	}
-}
-
-//**********************************************************************************************************
-bool CMappingCore::test_CF_128b_SSE_difference(Vec16c CF_1, Vec16c CF_2, uint32_t max_diff)
-{
-	uint32_t CF_diff = 0;
-
-	CF_diff = horizontal_add(abs(CF_1 - CF_2));
-
-	return CF_diff <= max_diff;
 }
 
 // EOF 

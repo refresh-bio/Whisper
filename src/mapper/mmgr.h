@@ -70,7 +70,6 @@ public:
 			delete[] pool[i].ptr;
 
 			alloc_mem -= pool[i].size;
-//			cerr << "Ptr_pool destructor: " + to_string(alloc_mem >> 20) + "MB\n";
 		}
 
 		delete[] pool;
@@ -96,7 +95,6 @@ public:
 				delete[] pool[i].ptr;
 
 				alloc_mem -= pool[i].size;
-//				cerr << "Ptr_pool alloc- : " + to_string(alloc_mem >> 20) + "MB\n";
 
 				// 10% overhead to avoid too many reallocations
 				pool[i].size = (uint64_t)(requested_size * 1.1);
@@ -105,7 +103,6 @@ public:
 				pool[i].reserved = true;
 				++no_reserved;
 				alloc_mem += pool[i].size;
-//				cerr << "Ptr_pool alloc+ : " + to_string(alloc_mem >> 20) + "MB\n";
 
 				auto p = pool[i].ptr;
 
@@ -113,9 +110,6 @@ public:
 
 				return p;
 			}
-
-//		cerr << "Cannot allocate in ptr pool: " + to_string(no_reserved) + " : " + to_string(pool_size) + "\n";
-//		exit(1);
 
 		return nullptr;
 	}
@@ -133,9 +127,6 @@ public:
 					cv.notify_one();
 				return;
 			}
-	
-//		cerr << "Cannot find pointer\n";
-//		exit(1);
 	}
 };
 
@@ -149,6 +140,7 @@ template<typename T> class CMemoryPool
 	int64_t part_size;
 	int64_t n_parts_total;
 	int64_t n_parts_free;
+	string name;
 
 	uchar_t *buffer, *raw_buffer;
 	uint32_t *stack;
@@ -161,12 +153,13 @@ public:
 	int64_t getAllocatedParts() { return n_parts_total - n_parts_free; }
 
 	// ************************************************************************************
-	CMemoryPool(int64_t _total_size, int64_t _part_size)
+	CMemoryPool(int64_t _total_size, int64_t _part_size, string _name)
 	{
 		raw_buffer = nullptr;
 		buffer = nullptr;
 		stack  = nullptr;
 		Prepare(_total_size, _part_size);
+		name = _name;
 	}
 
 	// ************************************************************************************
@@ -248,8 +241,9 @@ public:
 		lock_guard<mutex> lck(mtx);
 
 		stack[n_parts_free++] = (uint32_t) ((((uchar_t*) part) - buffer) / part_size);
-		if(n_parts_free <= 2)
-			cv.notify_all();		
+
+		if (n_parts_free <= 2)
+			cv.notify_all();
 	}
 
 	// ************************************************************************************
@@ -269,7 +263,8 @@ public:
 
 		stack[n_parts_free++] = (uint32_t) ((((uchar_t*) part1) - buffer) / part_size);
 		stack[n_parts_free++] = (uint32_t) ((((uchar_t*) part2) - buffer) / part_size);
-		if(n_parts_free <= 2)
+
+		if(n_parts_free <= 3)
 			cv.notify_all();		
 	}
 };

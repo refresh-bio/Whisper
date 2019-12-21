@@ -19,6 +19,374 @@
 
 
 // ************************************************************************************
+// candidate_mapping_t
+// ************************************************************************************
+template<>
+candidate_mapping_t candidate_mapping_t::construct<mapping_type_t::lev>
+	(ref_pos_t _pos, genome_t _direction, uint32_t _no_mismatches)
+{
+	candidate_mapping_t t;
+
+	t.type = mapping_type_t::lev;
+	t.pos = _pos;
+	t.direction = _direction;
+	t.no_mismatches = _no_mismatches;
+	
+	t.penalty = t.calc_penalty_lev();
+	
+	return t;
+}
+
+// ************************************************************************************
+template<>
+candidate_mapping_t candidate_mapping_t::construct<mapping_type_t::clipping_mismatches>
+	(ref_pos_t _pos, genome_t _direction, uint32_t _no_mismatches, uint32_t _clipping_len)
+{
+	candidate_mapping_t t;
+
+	t.type = mapping_type_t::clipping_mismatches;
+	t.pos = _pos;
+	t.direction = _direction;
+	t.no_mismatches = _no_mismatches;
+	t.clipping_len = _clipping_len;
+
+	t.penalty = t.calc_penalty_mismatches_clipping();
+
+	return t;
+}
+
+// ************************************************************************************
+template<>
+candidate_mapping_t candidate_mapping_t::construct<mapping_type_t::mismatches_clipping>
+(ref_pos_t _pos, genome_t _direction, uint32_t _no_mismatches, uint32_t _clipping_len)
+{
+	candidate_mapping_t t;
+
+	t.type = mapping_type_t::mismatches_clipping;
+	t.pos = _pos;
+	t.direction = _direction;
+	t.no_mismatches = _no_mismatches;
+	t.clipping_len = _clipping_len;
+
+	t.penalty = t.calc_penalty_mismatches_clipping();
+
+	return t;
+}
+
+// ************************************************************************************
+template<>
+candidate_mapping_t candidate_mapping_t::construct<mapping_type_t::indel_clipping>
+(ref_pos_t _pos, genome_t _direction, uint32_t _no_mismatches, uint32_t _matching_len1,
+	int32_t _indel_len1, uint32_t _matching_len2)
+{
+	candidate_mapping_t t;
+
+	t.type = mapping_type_t::indel_clipping;
+	t.pos = _pos;
+	t.direction = _direction;
+	t.no_mismatches = _no_mismatches;
+	t.matching_len1 = _matching_len1;
+	t.indel_len1 = _indel_len1;
+	t.matching_len2 = _matching_len2;
+
+	t.penalty = t.calc_penalty_indel_clipping();
+
+	return t;
+}
+
+// ************************************************************************************
+template<>
+candidate_mapping_t candidate_mapping_t::construct<mapping_type_t::clipping_indel>
+(ref_pos_t _pos, genome_t _direction, uint32_t _no_mismatches, uint32_t _matching_len1,
+	int32_t _indel_len1, uint32_t _matching_len2)
+{
+	candidate_mapping_t t;
+
+	t.type = mapping_type_t::clipping_indel;
+	t.pos = _pos;
+	t.direction = _direction;
+	t.no_mismatches = _no_mismatches;
+	t.matching_len1 = _matching_len1;
+	t.indel_len1 = _indel_len1;
+	t.matching_len2 = _matching_len2;
+
+	t.penalty = t.calc_penalty_indel_clipping();
+
+	return t;
+}
+
+// ************************************************************************************
+template<>
+candidate_mapping_t candidate_mapping_t::construct<mapping_type_t::indel1>
+(ref_pos_t _pos, genome_t _direction, uint32_t _no_mismatches, uint32_t _matching_len1,
+	int32_t _indel_len1)
+{
+	candidate_mapping_t t;
+
+	t.type = mapping_type_t::indel1;
+	t.pos = _pos;
+	t.direction = _direction;
+	t.no_mismatches = _no_mismatches;
+	t.matching_len1 = _matching_len1;
+	t.indel_len1 = _indel_len1;
+
+	t.penalty = t.calc_penalty_indel1();
+	
+	return t;
+}
+
+// ************************************************************************************
+template<>
+candidate_mapping_t candidate_mapping_t::construct<mapping_type_t::indel2>
+(ref_pos_t _pos, genome_t _direction, uint32_t _no_mismatches, uint32_t _matching_len1,
+	int32_t _indel_len1, uint32_t _matching_len2, int32_t _indel_len2)
+{
+	candidate_mapping_t t;
+
+	t.type = mapping_type_t::indel2;
+	t.pos = _pos;
+	t.direction = _direction;
+	t.no_mismatches = _no_mismatches;
+	t.matching_len1 = _matching_len1;
+	t.indel_len1 = _indel_len1;
+	t.matching_len2 = _matching_len2;
+	t.indel_len2 = _indel_len2;
+
+	t.penalty = t.calc_penalty_indel2();
+
+	return t;
+}
+
+// ************************************************************************************
+size_t candidate_mapping_t::serialize(uchar_t* ptr)
+{
+	auto ptr0 = ptr;
+
+	StoreUInt(ptr, pos, 4);
+	ptr += 4;
+
+	*ptr = (direction == genome_t::direct) ? 0x80u : 0;
+	*ptr += (type == mapping_type_t::lev) ? 0x40u : 0;
+	*ptr++ += (uchar_t)(no_mismatches & 0x3f);
+	   
+	if (type == mapping_type_t::lev)
+		return ptr - ptr0;
+
+	*ptr++ = (uchar_t)type;
+
+	if (type == mapping_type_t::indel1)
+	{
+		*ptr++ = (uchar_t) ((matching_len1 >> 8) & 0xf);
+		*ptr++ = (uchar_t) (matching_len1 & 0xff);
+		*ptr++ = indel_size_encode(indel_len1);
+ 	}
+	else if (type == mapping_type_t::indel2)
+	{
+		*ptr = (uchar_t)((matching_len1 >> 8) & 0xf);
+		*ptr++ += (uchar_t)((matching_len2 >> 4) & 0xf0u);
+
+		*ptr++ = (uchar_t)(matching_len1 & 0xffu);
+		*ptr++ = (uchar_t)(matching_len2 & 0xffu);
+		*ptr++ = indel_size_encode(indel_len1);
+		*ptr++ = indel_size_encode(indel_len2);
+	}
+	else if (type == mapping_type_t::indel_clipping || type == mapping_type_t::clipping_indel)
+	{
+		*ptr = (uchar_t)((matching_len1 >> 8) & 0xf);
+		*ptr++ += (uchar_t)((clipping_len >> 4) & 0xf0u);
+
+		*ptr++ = (uchar_t)(matching_len1 & 0xffu);
+		*ptr++ = (uchar_t)(clipping_len & 0xffu);
+		*ptr++ = indel_size_encode(indel_len1);
+	}
+	else if (type == mapping_type_t::mismatches_clipping || type == mapping_type_t::clipping_mismatches)
+	{
+		*ptr++ = (uchar_t)((matching_len1 >> 8) & 0xf);
+		*ptr++ = (uchar_t)(matching_len1 & 0xffu);
+	}
+	else if (type == mapping_type_t::clipping_clipping)
+	{
+		*ptr = (uchar_t)((matching_len1 >> 8) & 0xf);
+		*ptr++ += (uchar_t)((clipping_len >> 4) & 0xf0u);
+
+		*ptr++ = (uchar_t)(matching_len1 & 0xffu);
+		*ptr++ = (uchar_t)(clipping_len & 0xffu);
+	}
+
+	return ptr - ptr0;
+}
+
+// ************************************************************************************
+size_t candidate_mapping_t::deserialize(uchar_t* ptr)
+{
+	auto ptr0 = ptr;
+
+	uint64_t tmp;
+
+	LoadUInt(ptr, tmp, 4);
+	pos = (ref_pos_t)tmp;
+	ptr += 4;
+
+	direction = (*ptr & 0x80u) ? genome_t::direct : genome_t::rev_comp;
+	no_mismatches = *ptr & 0x3f;
+	if (*ptr++ & 0x40u)
+	{
+		type = mapping_type_t::lev;
+
+		return ptr - ptr0;
+	}
+
+	type = (mapping_type_t)*ptr++;
+
+	if (type == mapping_type_t::indel1)
+	{
+		matching_len1 = ((uint32_t) *ptr++) << 8;
+		matching_len1 += (uint32_t) *ptr++;
+		indel_len1 = indel_size_decode(*ptr++);
+	}
+	else if (type == mapping_type_t::indel2)
+	{
+		matching_len1 = ((uint32_t)(*ptr & 0xf)) << 8;
+		matching_len2 = ((uint32_t)(*ptr++ & 0xf0u)) << 4;
+		matching_len1 += (uint32_t)*ptr++;
+		matching_len2 += (uint32_t)*ptr++;
+		indel_len1 = indel_size_decode(*ptr++);
+		indel_len2 = indel_size_decode(*ptr++);
+	}
+	else if (type == mapping_type_t::indel_clipping || type == mapping_type_t::clipping_indel)
+	{
+		matching_len1 = ((uint32_t)(*ptr & 0xf)) << 8;
+		clipping_len = ((uint32_t)(*ptr++ & 0xf0)) << 4;
+		matching_len1 += (uint32_t)*ptr++;
+		clipping_len += (uint32_t)*ptr++;
+		indel_len1 = indel_size_decode(*ptr++);
+	}
+	else if (type == mapping_type_t::mismatches_clipping || type == mapping_type_t::clipping_mismatches)
+	{
+		matching_len1 = ((uint32_t)(*ptr++ & 0xf)) << 8;
+		matching_len1 += (uint32_t)*ptr++;
+	}
+	else if (type == mapping_type_t::clipping_clipping)
+	{
+		matching_len1 = ((uint32_t)(*ptr & 0xf)) << 8;
+		clipping_len = ((uint32_t)(*ptr++ & 0xf0)) << 4;
+		matching_len1 += (uint32_t)*ptr++;
+		clipping_len += (uint32_t)*ptr++;
+	}
+
+	calc_penalty();
+
+	return ptr - ptr0;
+}
+
+// ************************************************************************************
+size_t candidate_mapping_t::check_rec_size(uchar_t* ptr)
+{
+	if (*(ptr + 4) & 0x40)		// lev
+		return 5;
+
+	mapping_type_t type = (mapping_type_t)*(ptr + 5);
+
+	if (type == mapping_type_t::indel1)
+		return 9;
+	else if (type == mapping_type_t::indel2)
+		return 11;
+	else if (type == mapping_type_t::indel_clipping || type == mapping_type_t::clipping_indel)
+		return 10;
+	else if (type == mapping_type_t::mismatches_clipping || type == mapping_type_t::clipping_mismatches)
+		return 8;
+	else if (type == mapping_type_t::clipping_clipping)
+		return 9;
+
+	return 0;	// Cannot be here
+}
+
+// ************************************************************************************
+uchar_t* candidate_mapping_t::skip(uchar_t* ptr)
+{
+	return ptr + check_rec_size(ptr);
+}
+
+// ************************************************************************************
+void candidate_mapping_t::construct(candidate_mapping_t& mapping)
+{
+	type = mapping.type;
+	pos = mapping.pos;
+	direction = mapping.direction;
+	no_mismatches = mapping.no_mismatches;
+	matching_len1 = mapping.matching_len1;
+	matching_len2 = mapping.matching_len2;
+	indel_len1 = mapping.indel_len1;
+	indel_len2 = mapping.indel_len2;
+	clipping_len = mapping.clipping_len;
+
+	calc_penalty();
+}
+
+// ************************************************************************************
+void candidate_mapping_t::calc_penalty()
+{
+	if (type == mapping_type_t::lev)
+		penalty = calc_penalty_lev();
+	else if (type == mapping_type_t::clipping_indel || type == mapping_type_t::indel_clipping)
+		penalty = calc_penalty_indel_clipping();
+	else if (type == mapping_type_t::clipping_mismatches || type == mapping_type_t::mismatches_clipping)
+		penalty = calc_penalty_mismatches_clipping();
+	else if (type == mapping_type_t::indel1)
+		penalty = calc_penalty_indel1();
+	else if (type == mapping_type_t::indel2)
+		penalty = calc_penalty_indel2();
+	else if (type == mapping_type_t::clipping_clipping)
+		penalty = calc_penalty_clipping_clipping();
+	else
+		penalty = 0;		// !! Should never be here
+}
+
+// ************************************************************************************
+candidate_mapping_t& candidate_mapping_t::operator=(const candidate_mapping_t& mapping)
+{
+	if (&mapping == this)
+		return *this;
+
+	type = mapping.type;
+	pos = mapping.pos;
+	direction = mapping.direction;
+	no_mismatches = mapping.no_mismatches;
+	matching_len1 = mapping.matching_len1;
+	matching_len2 = mapping.matching_len2;
+	indel_len1 = mapping.indel_len1;
+	indel_len2 = mapping.indel_len2;
+	clipping_len = mapping.clipping_len;
+
+	penalty = mapping.penalty;
+
+	return *this;
+}
+
+// ************************************************************************************
+bool candidate_mapping_t::operator<(const candidate_mapping_t& mapping)
+{
+	if (penalty != mapping.penalty)
+		return penalty < mapping.penalty;
+
+	return pos < mapping.pos;
+}
+
+// ************************************************************************************
+candidate_mapping_t candidate_mapping_t::better(candidate_mapping_t& x, candidate_mapping_t& y)
+{
+	if (x.type == mapping_type_t::none)
+		return y;
+	if (y.type == mapping_type_t::none)
+		return x;
+
+	if (x < y)
+		return x;
+	else
+		return y;
+}
+
+// ************************************************************************************
 // CMappingsHeapGatherer
 // ************************************************************************************
 
@@ -37,25 +405,20 @@ void CMappingsHeapGatherer::Clear(size_t _max_size)
 }
 
 // ************************************************************************************
-void CMappingsHeapGatherer::Push(uint32_t pos, genome_t direction, uint32_t no_errors)
+//void CMappingsHeapGatherer::Push(uint32_t pos, genome_t direction, uint32_t no_errors, int32_t indel_marker)
+void CMappingsHeapGatherer::Push(candidate_mapping_t &mapping)
 {
-	uint64_t x;
-
-	x = ((uint64_t)no_errors) << 40;
-	x += ((uint64_t)pos) << 8;
-	x += (uint64_t) direction;
-	
 	if (size < max_size)
 	{
-		v_mappings[size++] = x;
+		v_mappings[size++].construct(mapping);
 		push_heap(v_mappings.begin(), v_mappings.begin() + size);
 	}
 	else
 	{
-		if (x < v_mappings.front())
+		if (mapping < v_mappings.front())
 		{
 			pop_heap(v_mappings.begin(), v_mappings.end());
-			v_mappings.back() = x;
+			v_mappings.back().construct(mapping);
 			push_heap(v_mappings.begin(), v_mappings.end());
 		}
 	}
@@ -68,9 +431,9 @@ bool CMappingsHeapGatherer::Empty()
 }
 
 // ************************************************************************************
-uint64_t CMappingsHeapGatherer::Pop()
+candidate_mapping_t CMappingsHeapGatherer::Pop()
 {
-	uint64_t r = 0;
+	candidate_mapping_t r;
 		
 	if (size)
 	{
@@ -83,7 +446,7 @@ uint64_t CMappingsHeapGatherer::Pop()
 }
 
 // ************************************************************************************
-uint64_t CMappingsHeapGatherer::PopUnsorted()
+candidate_mapping_t CMappingsHeapGatherer::PopUnsorted()
 {
 	return v_mappings[--size];
 }
@@ -97,7 +460,13 @@ uint32_t CMappingsHeapGatherer::DecodePos(uint64_t x) const
 // ************************************************************************************
 uint32_t CMappingsHeapGatherer::DecodeNoErrors(uint64_t x) const
 {
-	return (uint32_t)(x >> 40);
+	return (uint32_t)(x >> 40) & 0xff;
+}
+
+// ************************************************************************************
+uint32_t CMappingsHeapGatherer::DecodeIndelMarker(uint64_t x) const
+{
+	return (uint32_t)(x >> 48);
 }
 
 // ************************************************************************************
@@ -131,7 +500,7 @@ CMappingResultsCollector::CMappingResultsCollector(CParams *params, CObjects *ob
 
 	id_bytes   = BITS2BYTES(total_bits);
 
-	buffer_reserve = id_bytes + mapping_counter_size + sizeof(ref_pos_t) + 2 + 1;
+	buffer_reserve = id_bytes + mapping_counter_size + candidate_mapping_t::max_size;
 
 	buffers      = new uchar_t*[no_res_groups];
 	buffer_sizes = new uint32_t[no_res_groups];
@@ -174,13 +543,8 @@ CMappingResultsCollector::~CMappingResultsCollector()
 
 // ************************************************************************************
 // Store description of the mapping of a read:
-// * read_id		- (default: 5B)
-// * count			- (fixed: 1B)
-// * data: (fixed: 6B x count, but not more than some threshold)
-//   - pos_in_ref	- (fixed: 4B)
-//   - direction	- (fixed: 1B)
-//   - errors		- (fixed: 1B)
-void CMappingResultsCollector::Push(read_id_t id, ref_pos_t pos, genome_t direction, uint32_t no_differences)
+void CMappingResultsCollector::Push(read_id_t id, candidate_mapping_t mapping)
+	//ref_pos_t pos, genome_t direction, uint32_t no_differences, int32_t indel_marker)
 {
 	uint32_t group_id = (uint32_t) (id >> group_bits);
 
@@ -212,6 +576,8 @@ void CMappingResultsCollector::Push(read_id_t id, ref_pos_t pos, genome_t direct
 		added_bytes += id_bytes;
 //		buffers[group_id][buffer_sizes[group_id]++] = 0;							// counter
 		StoreUInt(buffers[group_id]+buffer_sizes[group_id], 0, mapping_counter_size);
+		cur_read_counter_ptr = buffers[group_id] + buffer_sizes[group_id];
+
 		buffer_sizes[group_id] += mapping_counter_size;
 		added_bytes += mapping_counter_size;
 		prev_read_id    = id;
@@ -221,28 +587,12 @@ void CMappingResultsCollector::Push(read_id_t id, ref_pos_t pos, genome_t direct
 		push_unique_counter++;
 	}
 
-	uint32_t rec_size = sizeof(ref_pos_t) + 1 + 1;
+//	IncrementUInt(buffers[group_id]+(buffer_sizes[group_id] - mapping_counter_size - cur_read_count*rec_size), mapping_counter_size);
+	IncrementUInt(cur_read_counter_ptr, mapping_counter_size);
 
-	// !!! Tymczasowo ignorujemy max_no_mappings
-/*	if(true_read_count >= max_no_mappings)		// do not store explicitly the mappings for reads that maps in too many places
-	{
-		if(true_read_count < max_counter_value)
-			IncrementUInt(buffers[group_id]+(buffer_sizes[group_id] - mapping_counter_size - max_no_mappings*rec_size), mapping_counter_size);
-//			++buffers[group_id][buffer_sizes[group_id]-1 - max_no_mappings*rec_size];		// increment counter
-		++true_read_count;
-
-		return;
-	}
-	*/
-
-//	++buffers[group_id][buffer_sizes[group_id]-1 - cur_read_count*rec_size];		// increment counter
-	IncrementUInt(buffers[group_id]+(buffer_sizes[group_id] - mapping_counter_size - cur_read_count*rec_size), mapping_counter_size);
-
-	StoreUInt(buffers[group_id]+buffer_sizes[group_id], pos, sizeof(ref_pos_t));
-	buffer_sizes[group_id] += sizeof(ref_pos_t);
-	buffers[group_id][buffer_sizes[group_id]++] = (uchar_t) direction;
-	buffers[group_id][buffer_sizes[group_id]++] = no_differences;
-	added_bytes += sizeof(ref_pos_t) + 2;
+	auto serialized_size = mapping.serialize(buffers[group_id] + buffer_sizes[group_id]);
+	buffer_sizes[group_id] += serialized_size;
+	added_bytes += serialized_size;
 	++cur_read_count;
 	++true_read_count;
 }
@@ -261,10 +611,12 @@ void CMappingResultsCollector::Complete()
 		buffer_sizes[i] = 0;
 	}
 
+#ifdef COLLECT_STATS
 	running_stats->AddValues(STAT_PUSH_RESULTS    , (int64_t) push_counter);
 	running_stats->AddValues(STAT_PUSH_RESULTS_UNQ, (int64_t) push_unique_counter);
 	running_stats->AddValues(STAT_PUSH_RESULTS_SEND_BYTES, (int64_t) sent_bytes);
 	running_stats->AddValues(STAT_PUSH_RESULTS_ADDED_BYTES, (int64_t) added_bytes);
+#endif
 }
 
 
@@ -337,7 +689,9 @@ void CMappingResultsDeliverer::operator()()
 
 	thr_watch.StopTimer();
 
+#ifdef COLLECT_STATS
 	running_stats->AddTotals(STAT_TIME_THR_RES_READER, thr_watch.GetElapsedTime());
+#endif
 }
 
 // ************************************************************************************
@@ -370,7 +724,9 @@ CResultGroupsWriter::CResultGroupsWriter(CParams *params, CObjects *objects, str
 	SetMemcpyCacheLimit(8);
 
 	// If alread registered nothing happens
+#ifdef COLLECT_STATS
 	running_stats->Register(STAT_MAPPING_GROUP_WRITER_TOTAL, "Mapping groups writer: sizes (total)", running_stats_t::averages);
+#endif
 }
 
 // ************************************************************************************
@@ -419,7 +775,9 @@ void CResultGroupsWriter::operator()()
 
 	thr_watch.StopTimer();
 
+#ifdef COLLECT_STATS
 	running_stats->AddTotals(STAT_TIME_THR_RES_WRITER, thr_watch.GetElapsedTime());
+#endif
 }
 
 // ************************************************************************************
@@ -488,7 +846,9 @@ bool CResultGroupsWriter::write_part(uint32_t group_id)
 	buffer_parts[group_id].clear();
 	buffer_sizes[group_id] = 0;
 
+#ifdef COLLECT_STATS
 	running_stats->AddValues(STAT_MAPPING_GROUP_WRITER_TOTAL, (int64_t) offset);
+#endif
 
 	// Find the largest bin
 	largest_group_id   = 0;

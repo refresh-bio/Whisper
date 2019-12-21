@@ -47,6 +47,7 @@ void usage()
 	cerr << "  file_pe[1|2] - FASTQ files (paired-end)\n";
 	cerr << "Options:\n";
 	cerr << "  -b <value> - no. of temporary files (minimum: 100, default: " << cmd_params.no_bins << ")\n";
+	cerr << "  -clipping-distance <value> - no. of sigmas for max. additional distance in clipping (default: " << cmd_params.clipping_distance_sigmas << ")\n";
 	cerr << "  -d[fr/ff/rf] - mapping orientation (default: " <<
 		(cmd_params.mapping_orientation == mapping_orientation_t::forward_forward ? "-dff" :
 			cmd_params.mapping_orientation == mapping_orientation_t::forward_reverse ? "-dfr (forward - reverse)" : 
@@ -55,15 +56,23 @@ void usage()
 	cerr << "  -dev-mode - turn on developer mode (default: " << cmd_params.developer_mode << ")\n";
 #endif
 	cerr << "  -dist_paired <value> - max. distance for paired read (default: " << cmd_params.max_mate_distance << ")\n";
-	cerr << "  -e <value> - max. no of errors (default: " << cmd_params.max_no_errors << ", max: " << 100.0 * largest_frac_errors << "% of read length)\n";
+//	cerr << "  -e <value> - max. no of errors (default: " << cmd_params.max_no_errors << ", max: " << 100.0 * largest_frac_errors << "% of read length)\n";
+	cerr << "  -e <value> - max. no of errors (default: auto)\n";
 	cerr << "  -e-paired <value> - max. fraction of errors in paired read (default: " << cmd_params.max_mate_edit_distance_frac << ")\n";
 	cerr << "  -enable-boundary-clipping <value> - enable clipping at boundaries when a lot of mismatches appears (default: " << cmd_params.enable_boundary_clipping << ")\n";
+	cerr << "  -enable-mapping_indels <value> - enable looking for long indels during mapping stages (default: " << cmd_params.enable_mapping_indels << ")\n";
+	cerr << "  -enable-short-indel-refinement <value> - enable short indel refinement after mapping (default: " << cmd_params.enable_short_indel_refinement << ")\n";
+	cerr << "  -enable-short-reads <value> - enable reads shorter than 90% of the longest reads (default: " << cmd_params.enable_short_reads << ")\n";
 	cerr << "  -filter <value> - store only mappings for given chromosome (default: " << cmd_params.filter << ")\n";
-	cerr << "  -gap-open <value> - score for gap open (default: " << cmd_params.gap_open << ")\n";
-	cerr << "  -gap-extend <value> - score for gap extend (default: " << cmd_params.gap_extend << ")\n";
+//	cerr << "  -gap-open <value> - score for gap open (default: " << cmd_params.gap_open << ")\n";
+//	cerr << "  -gap-extend <value> - score for gap extend (default: " << cmd_params.gap_extend << ")\n";
+	cerr << "  -gap-del-open <value> - score for gap (del) open (default: " << cmd_params.gap_del_open << ")\n";
+	cerr << "  -gap-del-extend <value> - score for gap (del) extend (default: " << cmd_params.gap_del_extend << ")\n";
+	cerr << "  -gap-ins-open <value> - score for gap (ins) open (default: " << cmd_params.gap_ins_open << ")\n";
+	cerr << "  -gap-ins-extend <value> - score for gap (ins) extend (default: " << cmd_params.gap_ins_extend << ")\n";
 	cerr << "  -gzipped-SAM-level <value> - gzip compression level of SAM/BAM, 0 - no compression (default: " << cmd_params.gzipped_SAM_level << ")\n";
-	cerr << "  -hit-merging-threshold <value> - minimal distance between different mappings (default: " << cmd_params.hit_merging_threshold << ")\n";
 	cerr << "  -high-confidence-sigmas <value> - (default: " << cmd_params.high_confidence_sigmas << ")\n";
+	cerr << "  -hit-merging-threshold <value> - minimal distance between different mappings (default: " << cmd_params.hit_merging_threshold << ")\n";
 	cerr << "  -hit-merging-wrt-first <value> - calculate distance in marged group w.r.t. first (default: " << cmd_params.hit_merging_wrt_first << ")\n";
 	cerr << "  -m[f/s/a] - mode: first stratum/second stratum/all strata (default: " <<
 //	cerr << "  -m[f|a] - mode: first stratum/all strata (default: " <<
@@ -71,23 +80,28 @@ void usage()
 			cmd_params.mapping_mode == mapping_mode_t::second ? "second stratum" : 
 			"all strata") << ")\n";
 	cerr << "  -mask-lqb <value> - mask bases of quality lower than value (default: " << cmd_params.mask_low_quality_bases << ")\n";
-//	cerr << "  -o <value> - approximate amount of RAM in GB (default: " << cmd_params.max_total_memory << "; must be at least equal no. threads, but not less than 8)\n";
+//	cerr << "  -max-approx-indel-len <value> - max. indel length (default: " << cmd_params.max_approx_indel_len << ")\n";
+	cerr << "  -max-indel-len <value> - max. indel length (default: " << cmd_params.max_approx_indel_len << ")\n";
+	cerr << "  -min-clipped-factor <value> - mask bases of quality lower than value (default: " << cmd_params.min_clipped_factor << ")\n";
 	cerr << "  -out <name> - name of the output file (default: " << cmd_params.project_name << ")\n";
 	cerr << "  -penalty-saturation <value> - no. of sigmas for max. penalty in matching pairs (default: " << cmd_params.penalty_saturation_sigmas << ")\n";
-	cerr << "  -rg <read_group> - complete read group header line, (example: '@RG\\tID:foo\\tSM:bar')\n"
-		    "                     '\\t' character will be converted to a TAB in the output SAM/BAM,\n"
-			"                      while the read group ID will be attached to every read \n";
-	cerr << "  -r[s|p] - single or paired-end reads <value> (default: " << (cmd_params.paired_reads ? "paired" : "single") << ")\n";
+	cerr << "  -rg <read_group> - complete read group header line, ’\t’ character will be converted to a TAB in the output SAM while the read group ID will be attached to every read (example line: ’@RG\tID:foo\tSM:bar’)\n";
+	cerr << "  -r[s|p] - single or paired-end reads (default: " << (cmd_params.paired_reads ? "paired" : "single") << ")\n";
 	cerr << "  -score-discretization-threshold (default: " << cmd_params.score_discretization_threshold << ")\n";
-	cerr << "  -score-match <value> - score for matching symbol (default: " << cmd_params.match_score << ")\n";
 	cerr << "  -score-clipping <value> score for clipping (default: " << cmd_params.clipping_score << ")\n";
+	cerr << "  -score-match <value> - score for matching symbol (default: " << cmd_params.match_score << ")\n";
 	cerr << "  -score-mismatch <value> - score for mismatching symbol (default: " << cmd_params.mismatch_score << ")\n";
 	cerr << "  -sens <value> - turn on/off sensitive mode (default: " << (bool) cmd_params.sensitive_mode << ")\n";
 	cerr << "  -sens-factor <value> - sensitivity factor (default: " << cmd_params.sensitivity_factor << ")\n";
-	cerr << "  -stdout - use stdout to store the output\n";
-	cerr << "  -store-BAM - turn on saving in BAM\n";
+	cerr << "  -stdout - use stdout to store the output (default: " << cmd_params.use_stdout << ")\n";
+	cerr << "  -store-BAM - turn on saving in BAM (default: " << (bool)cmd_params.store_BAM << ")\n";
 	cerr << "  -t <value> - no. of threads (0-adjust to hardware) (default: " << cmd_params.no_threads << ")\n";
 	cerr << "  -temp <name> - prefix for temporary files (default: " << cmd_params.temp_prefix << ")\n";
+#ifdef ENABLE_VCF_VARIANTS
+	cerr << "  -var-indel-long - use also long indel variants if present (default: " << cmd_params.enable_var_indel_long << ")\n";
+	cerr << "  -var-indel-short - use also short indel variants if present (default: " << cmd_params.enable_var_indel_short << ")\n";
+	cerr << "  -var-indel-snp - use also SNP variants if present (default: " << cmd_params.enable_var_snp << ")\n";
+#endif
 	cerr << "  -x - load complete suffix arrays in main memory (default: " << cmd_params.sa_in_ram << ")\n";
 
 #ifdef _DEVELOPMENT_MODE
@@ -115,7 +129,7 @@ bool parse_parameters(int argc, char **argv)
 {
 	int i;
 #ifdef _DEVELOPMENT_MODE
-	uint64_t tmp;
+//	uint64_t tmp;
 #endif
 
 	if(argc < 6)
@@ -132,13 +146,6 @@ bool parse_parameters(int argc, char **argv)
 		// Number of threads
 		if(strcmp(argv[i], "-t") == 0 && i + 1 < argc)
 			cmd_params.no_threads = atoi(argv[++i]);
-		// Approximate memory limit
-/*		else if(strcmp(argv[i], "-o") == 0 && i + 1 < argc)
-		{
-			double t = atof(argv[++i]);
-			tmp = ((uint64_t) t) << 30;
-			cmd_params.max_total_memory = max(tmp, (uint64_t) (8ull << 30));
-		}*/
 		// Mapping orientation - forward-reverse
 		else if(strcmp(argv[i], "-dfr") == 0)
 			cmd_params.mapping_orientation = mapping_orientation_t::forward_reverse;
@@ -223,6 +230,10 @@ bool parse_parameters(int argc, char **argv)
 			cmd_params.mapping_mode = mapping_mode_t::all;
 		else if (strcmp(argv[i], "-mask-lqb") == 0 && i + 1 < argc)
 			cmd_params.mask_low_quality_bases = atoi(argv[++i]);
+		else if (strcmp(argv[i], "-min-clipped-factor") == 0 && i + 1 < argc)
+			cmd_params.min_clipped_factor = atof(argv[++i]);
+		else if (strcmp(argv[i], "-clipping-distance") == 0 && i + 1 < argc)
+			cmd_params.clipping_distance_sigmas = atof(argv[++i]);
 		else if (strcmp(argv[i], "-penalty-saturation") == 0 && i + 1 < argc)
 			cmd_params.penalty_saturation_sigmas = atof(argv[++i]);
 		// Single or paired-end reads
@@ -244,16 +255,44 @@ bool parse_parameters(int argc, char **argv)
 			cmd_params.clipping_score = atof(argv[++i]);
 		else if (strcmp(argv[i], "-score-discretization-threshold") == 0 && i + 1 < argc)
 			cmd_params.score_discretization_threshold = atof(argv[++i]);
-		else if (strcmp(argv[i], "-gap-open") == 0 && i + 1 < argc)
+//		else if (strcmp(argv[i], "-max-approx-indel-len") == 0 && i + 1 < argc)
+		else if (strcmp(argv[i], "-max-indel-len") == 0 && i + 1 < argc)
+			cmd_params.max_approx_indel_len = atof(argv[++i]);
+/*		else if (strcmp(argv[i], "-gap-open") == 0 && i + 1 < argc)
 			cmd_params.gap_open = atof(argv[++i]);
 		else if (strcmp(argv[i], "-gap-extend") == 0 && i + 1 < argc)
-			cmd_params.gap_extend = atof(argv[++i]);
+			cmd_params.gap_extend = atof(argv[++i]);*/
+		else if (strcmp(argv[i], "-gap-ins-open") == 0 && i + 1 < argc)
+			cmd_params.gap_ins_open = atof(argv[++i]);
+		else if (strcmp(argv[i], "-gap-ins-extend") == 0 && i + 1 < argc)
+			cmd_params.gap_ins_extend = atof(argv[++i]);
+		else if (strcmp(argv[i], "-gap-del-open") == 0 && i + 1 < argc)
+			cmd_params.gap_del_open = atof(argv[++i]);
+		else if (strcmp(argv[i], "-gap-del-extend") == 0 && i + 1 < argc)
+			cmd_params.gap_del_extend = atof(argv[++i]);
 		else if (strcmp(argv[i], "-enable-boundary-clipping") == 0 && i + 1 < argc)
 			cmd_params.enable_boundary_clipping = (bool) atoi(argv[++i]);
+		else if (strcmp(argv[i], "-enable-paired-clipping") == 0 && i + 1 < argc)
+			cmd_params.enable_paired_clipping = (bool)atoi(argv[++i]);
+		else if (strcmp(argv[i], "-enable-short-reads") == 0 && i + 1 < argc)
+			cmd_params.enable_short_reads = (bool)atoi(argv[++i]);
+		else if (strcmp(argv[i], "-enable-mapping-indels") == 0 && i + 1 < argc)
+			cmd_params.enable_mapping_indels = (bool)atoi(argv[++i]);
+		else if (strcmp(argv[i], "-enable-short-indel-refinement") == 0 && i + 1 < argc)
+			cmd_params.enable_short_indel_refinement = (bool)atoi(argv[++i]);
 		else if (strcmp(argv[i], "-mapq-mult") == 0 && i + 1 < argc)
 			cmd_params.mapq_mult = atof(argv[++i]);
 		else if (strcmp(argv[i], "-mapq-div") == 0 && i + 1 < argc)
 			cmd_params.mapq_div = atof(argv[++i]);
+		// Variants
+#ifdef ENABLE_VCF_VARIANTS
+		else if (strcmp(argv[i], "-var-indel-long") == 0)
+			cmd_params.enable_var_indel_long = true;
+		else if (strcmp(argv[i], "-var-indel-short") == 0)
+			cmd_params.enable_var_indel_short = true;
+		else if (strcmp(argv[i], "-var-indel-snp") == 0)
+			cmd_params.enable_var_snp = true;
+#endif
 
 		// No. of temporary bins
 		else if(strcmp(argv[i], "-b") == 0)
@@ -323,12 +362,8 @@ bool parse_parameters(int argc, char **argv)
 	else
 		cmd_params.max_total_memory = ((uint64_t)cmd_params.no_threads) << 30;
 	
-	// Check memory settings
-/*	if ((cmd_params.max_total_memory >> 30) < cmd_params.no_threads)
-	{
-		cerr << "Warning: Max. memory usage (in GB) must be at least equal to no. of threads (but not less than 8GB).\nMemory setting is corrected to " << cmd_params.no_threads << "GB\n";
-		cmd_params.max_total_memory = ((uint64_t) cmd_params.no_threads) << 30;
-	}*/
+	// Adjust params
+	cmd_params.max_approx_indel_mismatches = (uint32_t) (cmd_params.max_no_errors * cmd_params.sensitivity_factor);
 
 	return true;
 }

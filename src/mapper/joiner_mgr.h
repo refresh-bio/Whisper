@@ -16,9 +16,9 @@
 #include <thread>
 
 #include "../common/defs.h"
-#include "../common/idstore.h"
-#include "../common/queue.h"
-#include "../common/params.h"
+#include "idstore.h"
+#include "queue.h"
+#include "params.h"
 #include "../common/types.h"
 
 #include <map>
@@ -39,7 +39,7 @@ class CJoinerMgr
 	CRegisteringQueue<mapped_reads_t> *q_map_reads;
 	CRegisteringQueue<uint32_t> *q_res_ids;
 
-	mutable mutex mtx;								// The mutex to synchronise on
+	mutable mutex mtx;								
 
 	void send_bin_for_processing(uint32_t bin_id);
 	void complete();

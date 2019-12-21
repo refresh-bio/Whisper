@@ -15,7 +15,7 @@
 #include "../common/defs.h"
 #include "../common/utils.h"
 #include "../common/types.h"
-#include "../common/mmgr.h"
+#include "mmgr.h"
 #include <vector>
 
 using namespace std;
@@ -30,8 +30,8 @@ public:
 	vector<uint32_t> data;
 	vector<uint32_t> data_log;
 
-	uint32_t ht_size;
-	uint32_t ht_mask;
+	uint32_t ht_size = 0;
+	uint32_t ht_mask = 0;
 	uint64_t ht_mult = 0x5555555555555555ull;
 
 	const size_t size() const { return ht_size;  }
@@ -77,44 +77,52 @@ class CSoftClipping
 protected:
 	uint32_t max_query_len;
 	uint32_t max_text_len;
+	uint32_t min_approx_indel_len;
+	uint32_t max_approx_indel_len;
+	uint32_t max_approx_indel_mismatches;
 
 	uint32_t cur_offset;
 	uchar_t *ref_ptr;
 	uint32_t ref_size;
 
-	uint32_t rev_comp_code[8];
+	uint32_t rev_comp_code[16];
 	uint32_t raw_code[128];
 	uint32_t raw_rev_comp_code[128];
 	uint32_t alloc_text_M;
 	uint32_t seq_len;
-	char code2symbol[8];
+	char code2symbol[16];
 
 	vector<uchar_t> query;
 
 	uchar_t* genome_prefetch;
-	vector<uint32_t> checked_pos;
-	vector<uint32_t> checked_pos_log;
+	vector<uint32_t> checked_pos_left, checked_pos_right;
+	vector<uint32_t> checked_pos_left_log, checked_pos_right_log;
 	uint32_t query_len;
 
 	const uint32_t empty_pos_in_query = 1u << 30;
 	HashTable ht;
 
+	void(*ptr_PrefetchDecompressed)(uchar_t*, uchar_t*, uint32_t, bool);
+
 	void clear_ckecked_pos()
 	{
-		for (auto x : checked_pos_log)
-			checked_pos[x] = empty_pos_in_query;
-		checked_pos_log.clear();
+		for (auto x : checked_pos_left_log)
+			checked_pos_left[x] = empty_pos_in_query;
+		checked_pos_left_log.clear();
+		for (auto x : checked_pos_right_log)
+			checked_pos_right[x] = empty_pos_in_query;
+		checked_pos_right_log.clear();
 	}
 
 public:
-	CSoftClipping(uint32_t _max_query_len, uint32_t _max_text_len);
+	CSoftClipping(uint32_t _max_query_len, uint32_t _max_text_len, uint32_t _min_approx_indel_len, uint32_t _max_approx_indel_len, uint32_t _max_approx_indel_mismatches);
 	~CSoftClipping();
 
 	void setReference(uchar_t *_ref_ptr, uint32_t _ref_size, uint32_t _cur_offset);
 	bool preprocess(uchar_t *seq, uint32_t seq_len, genome_t orientation);
 	bool preprocessRawSeq(uchar_t *seq, uint32_t seq_len, genome_t orientation);
 	bool match(ref_pos_t ref_pos, uint32_t max_distance_in_ref, uint32_t min_exact_len, ref_pos_t &pos, uint32_t &left_clipping, uint32_t &right_clipping,
-		uint32_t &left_match, uint32_t &right_match, int32_t &del_size);
+		uint32_t &left_match, uint32_t &right_match, int32_t &del_size, uint32_t &no_mismatches);
 
 	/*
 	ExtCigar format description:
@@ -125,12 +133,12 @@ public:
 	-clipping: $
 	*/
 	void getExtCigar(uchar_t *ext_cigar, const uchar_t* tmp_ref_sequence, const uchar_t* tmp_read_sequence, ref_pos_t pos, uint32_t seq_len, 
-		uint32_t left_clipping, uint32_t right_clipping, uint32_t left_match, uint32_t right_match, int32_t del_size,
+		uint32_t left_clipping, uint32_t right_clipping, uint32_t left_match, uint32_t right_match, int32_t del_size, uint32_t no_mismatches,
 		const scoring_t &scoring, double& affine_score);
 
-	void clipIllegalPositions(mapping_desc_t& mapping, const scoring_t& scoring, const std::vector<seq_desc_t>& seq_desc, CMemoryPool<uchar_t>& mp_ext_cigar);
-	void clipLowQualityPositions(mapping_desc_t& mapping, const uchar_t* quality);
-	void clipBoundaryPositions(mapping_desc_t& mapping, const scoring_t& scoring);
+	void clipIllegalPositions(mapping_desc_t& mapping_desc, const scoring_t& scoring, const std::vector<seq_desc_t>& seq_desc, CMemoryPool<uchar_t>& mp_ext_cigar);
+	void clipLowQualityPositions(mapping_desc_t& mapping_desc, const uchar_t* quality);
+	void clipBoundaryPositions(mapping_desc_t& mapping_desc, const scoring_t& scoring);
 	void clipOverlappingPairs(mapping_pair_t& p, const scoring_t& scoring, CMemoryPool<uchar_t>& mp_ext_cigar);
 
 protected:

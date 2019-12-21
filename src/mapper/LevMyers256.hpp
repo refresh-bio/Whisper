@@ -11,7 +11,9 @@
 
 
 #include "LevMyers256.h"
+#pragma warning (disable: 26495 26451 6385)
 #include "vector_utils.h"
+#pragma warning (default: 26495 26451 6385)
 #include "../common/types.h"
 
 #include <iostream>
@@ -47,9 +49,17 @@ void LevMyers256<instruction_set>::reallocBuffers(uint32_t _max_query_len, uint3
 	this->max_query_len = _max_query_len;
 	this->max_text_len = _max_text_len,
 
-		bp256_n_words = (max_query_len + 256) / 256;
-	bp256_M = (bp256_t**)realloc(bp256_M, sizeof(bp256_t*) * (max_text_len + 4 + bp256_n_words)); // + 4 because 256 bit
-	bp256_raw_M = (bp256_t *)alloc_aligned(bp256_raw_ptr_M, (max_text_len + 4 + bp256_n_words) * bp256_n_words * sizeof(bp256_t), sizeof(simd256_t));
+	bp256_n_words = (max_query_len + 256) / 256;
+	
+	if (auto t = (bp256_t**)realloc(bp256_M, sizeof(bp256_t*) * (max_text_len + 4 + bp256_n_words))) // + 4 because 256 bit
+		bp256_M = t;
+	else
+		exit(1);
+
+	if (auto t = (bp256_t*)alloc_aligned(bp256_raw_ptr_M, (max_text_len + 4 + bp256_n_words) * bp256_n_words * sizeof(bp256_t), sizeof(simd256_t)))
+		bp256_raw_M = t;
+	else
+		exit(1);
 
 	for (uint32_t i = 0; i < max_text_len + 4; ++i)
 		bp256_M[i] = &bp256_raw_M[i * bp256_n_words];
@@ -64,9 +74,11 @@ void LevMyers256<instruction_set>::reallocBuffers(uint32_t _max_query_len, uint3
 		bp256_M[0][i].D0 = ~(0ull);
 	}
 
-	genome_prefetch = (uchar_t*)realloc(genome_prefetch, sizeof(uchar_t) * (std::max(max_query_len, max_text_len) + 5));
+	if (auto t = (uchar_t*)realloc(genome_prefetch, sizeof(uchar_t) * (std::max(max_query_len, max_text_len) + 8)))
+		genome_prefetch = t;
+	else
+		exit(1);
 }
-
 
 // ************************************************************************************
 template <instruction_set_t instruction_set>
@@ -79,8 +91,11 @@ bool LevMyers256<instruction_set>::dynamicProgramming(
 	uint32_t seq_len_m1 = seq_len - 1;
 	uint32_t red_m = (seq_len_m1) % 256;
 	uint32_t word_num = seq_len_m1 / 64;
-	Vec4uq red_m_mask = 0;
-	red_m_mask.set_bit(red_m, 1);
+	uint64_t red_m_mask = 1ull << (red_m % 64);
+	uint64_t red_m_word = red_m / 64;
+
+	int middle_point_in_ref = (max_distance_in_ref + seq_len) / 2;
+	int best_dist_from_middle = max_distance_in_ref + seq_len;		// large value
 
 	uint32_t min_ed = seq_len;
 	uint32_t min_ed_pos = 0;
@@ -92,8 +107,8 @@ bool LevMyers256<instruction_set>::dynamicProgramming(
 	}
 
 	if (max_distance_in_ref > max_text_len) {
+		throw std::runtime_error("reallocation needed: max_query_len: " + to_string(max_text_len) + " max_dist: " + to_string(max_distance_in_ref));
 		reallocBuffers(max_query_len, max_distance_in_ref, 4);
-		throw std::runtime_error("reallocation needed");
 	}
 
 	bp256_t *curr_bp_M = bp256_M[1];
@@ -107,14 +122,7 @@ bool LevMyers256<instruction_set>::dynamicProgramming(
 	*ptr++ = 7;			// No symbol
 	*ptr++ = 7;			// No symbol
 	*ptr++ = 7;			// No symbol
-	if (ref_pos & 1)
-		*ptr++ = *genome_ptr++ & 0x0f;
-	for (uint32_t i = 0; i < text_len_div2; ++i)
-	{
-		*ptr++ = *genome_ptr >> 4;
-		*ptr++ = *genome_ptr++ & 0x0f;
-	}
-
+	PrefetchDecompressed256(ptr, genome_ptr, max_distance_in_ref + 3, ref_pos & 1);
 	ptr = genome_prefetch;
 
 	simd256_t prev_D0 = bp256_M[0][0].D0;
@@ -135,7 +143,7 @@ bool LevMyers256<instruction_set>::dynamicProgramming(
 		simd256_t X(bp_PM[*(ptr + 3)][0], bp_PM[*(ptr + 2)][1], bp_PM[*(ptr + 1)][2], bp_PM[*ptr][3]);
 		++ptr;
 
-		simd256_t tmp = permute4uq<-1, 0, 1, 2>(prev_HN);
+		simd256_t tmp = permute4<-1, 0, 1, 2>(prev_HN);
 		X |= tmp >> 63;
 
 		curr_D0 = (((X & prev_VP) + prev_VP) ^ prev_VP) | X | prev_VN;
@@ -143,11 +151,11 @@ bool LevMyers256<instruction_set>::dynamicProgramming(
 		curr_HN = curr_D0 & prev_VP;
 		X = curr_HP << 1;
 
-		tmp = permute4uq<-1, 0, 1, 2>(prev_HP);
+		tmp = permute4<-1, 0, 1, 2>(prev_HP);
 		X |= tmp >> 63;
 	
 		curr_VP = (curr_HN << 1) | ~(curr_D0 | X);
-		tmp = permute4uq<-1, 0, 1, 2>(prev_HN);
+		tmp = permute4<-1, 0, 1, 2>(prev_HN);
 		curr_VP |= tmp >> 63;
 
 		curr_VN = curr_D0 & X;
@@ -165,26 +173,63 @@ bool LevMyers256<instruction_set>::dynamicProgramming(
 		prev_VN = curr_VN;
 		prev_VP = curr_VP;
 
-		if (curr_HN.get_bit(red_m))
-	//	if (horizontal_or(curr_bp_M->HN & red_m_mask != 0))
+//		if (curr_HN.get_bit(red_m))
+		if (curr_HN[red_m_word] & red_m_mask)
 		{
 			if (--curr_ed < min_ed)
 			{
 				min_ed = curr_ed;
 				min_ed_pos = j - word_num;
+//				best_dist_from_middle = abs((int) j - middle_point_in_ref);
 			}
 			else if (curr_ed == min_ed)
-				if (min_ed_pos + 1 == j - word_num)
+			{
+/*				if (min_ed_pos + 1 == j - word_num)
+				{
+					best_dist_from_middle = dist_from_middle;
 					min_ed_pos = j - word_num;
+				}*/
+
+				bool last_symbol_match = *(ptr + (3 - (int)word_num) - 1) == last_symbol;
+
+				auto D0_bit = curr_D0[red_m_word] & red_m_mask;
+//				if((curr_D0.get_bit(red_m) && last_symbol_match) || !curr_D0.get_bit(red_m))
+				if((D0_bit && last_symbol_match) || !D0_bit)
+					min_ed_pos = j - word_num;
+
+/*				int dist_from_middle = abs((int)j - middle_point_in_ref);
+				if (min_ed_pos + 1 == j - word_num && dist_from_middle < best_dist_from_middle)
+				{
+					best_dist_from_middle = dist_from_middle;
+					min_ed_pos = j - word_num;
+				}*/
+			}
 		}
 		else
 		{
-			if (curr_HP.get_bit(red_m))
-		//	if (horizontal_or(curr_bp_M->HP & red_m_mask != 0))
+//			if (curr_HP.get_bit(red_m))
+			if (curr_HP[red_m_word] & red_m_mask)
 				curr_ed++;
 			else if (curr_ed == min_ed)
-				if(min_ed_pos + 1 == j - word_num)
+			{
+				bool last_symbol_match = *(ptr + (3 - (int) word_num) - 1) == last_symbol;
+
+//				if ((curr_D0.get_bit(red_m) && last_symbol_match) || !curr_D0.get_bit(red_m))
+				auto D0_bit = curr_D0[red_m_word] & red_m_mask;
+				if ((D0_bit && last_symbol_match) || !D0_bit)
 					min_ed_pos = j - word_num;
+
+
+/*				int dist_from_middle = abs((int)j - middle_point_in_ref);
+				if (min_ed_pos + 1 == j - word_num && dist_from_middle < best_dist_from_middle)
+				{
+					best_dist_from_middle = dist_from_middle;
+					min_ed_pos = j - word_num;
+				}*/
+
+//				if (min_ed_pos + 1 == j - word_num)
+//					min_ed_pos = j - word_num;
+			}
 
 			if (curr_ed > max_distance_in_ref + 1 - j + max_mate_edit_distance)
 				break;
@@ -216,6 +261,8 @@ ref_pos_t LevMyers256<instruction_set>::getExtCigar(uchar_t *ext_cigar, uchar_t*
 	const char *decode = "ACGTNNXX";
 
 	uint32_t h_val, v_val, d_val, c_val;
+	matrix_dir_t prev_dir = matrix_dir_t::D;
+	matrix_dir_t curr_dir;
 
 	c_val = edit_dist;
 	affine_score = 0;
@@ -225,70 +272,92 @@ ref_pos_t LevMyers256<instruction_set>::getExtCigar(uchar_t *ext_cigar, uchar_t*
 	string_reader_t quality_reader(quality, seq_len, dir);
 
 	while (read_pos && pos) {
-		if (tmp_read_sequence[read_pos] == tmp_ref_sequence[pos - 1]) {
-			// match
-			inIndel = false;
-			affine_score += scoring.match; //quality_reader[read_pos];
-			--read_pos;
-			--pos;
-			ext_cigar[cigar_pos++] = '.';
-		}
-		else {
-			uint32_t word_no = (read_pos - 1) / 64;
-			uint64_t word_mask = 1ull << ((read_pos - 1) % 64);
+		uint32_t word_no = (read_pos - 1) / 64;
+		uint64_t word_mask = 1ull << ((read_pos - 1) % 64);
 
-			const auto& word256 = *bp256_M[pos + word_no];
+		const auto& word256 = *bp256_M[pos + word_no];
 
-			d_val = h_val = v_val = c_val;
+		d_val = h_val = v_val = c_val;
 
-			if (!(word256.D0.extract(word_no) & word_mask)) { --d_val; }
-			if (word256.HP.extract(word_no) & word_mask) { --h_val; }
-			if (word256.HN.extract(word_no) & word_mask) { ++h_val; }
-			if (word256.VP.extract(word_no) & word_mask) { --v_val; }
-			if (word256.VN.extract(word_no) & word_mask) { ++v_val; }
+		if (!(word256.D0.extract(word_no) & word_mask)) { --d_val; }
+		if (word256.HP.extract(word_no) & word_mask) { --h_val; }
+		if (word256.HN.extract(word_no) & word_mask) { ++h_val; }
+		if (word256.VP.extract(word_no) & word_mask) { --v_val; }
+		if (word256.VN.extract(word_no) & word_mask) { ++v_val; }
 
-			if (d_val <= h_val && d_val <= v_val) {
-				// mismatch
-				affine_score += scoring.mismatch; //quality_reader[read_pos];
-				inIndel = false;
-				++num_events;
+		int match_cost = (tmp_read_sequence[read_pos] != tmp_ref_sequence[pos - 1]);
 
-				ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos-1]];
-				--read_pos;
-				--pos;
-				c_val = d_val;
-			}
-			else if (h_val <= v_val) {
-				// deletion
-				if (inIndel) {
-					affine_score += scoring.gap_extend;
-				} else {
-					affine_score += scoring.gap_open;
-					++num_events;
-					inIndel = true;
-				}
+		bool can_come_from_H = (h_val + 1 == c_val);
+		bool can_come_from_V = (v_val + 1 == c_val);
+		bool can_come_from_D = (d_val + match_cost == c_val);
 
-				ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos-1]];
-				ext_cigar[cigar_pos++] = '^';
-				--pos;
-				c_val = h_val;
+		if (can_come_from_D && (
+			(prev_dir == matrix_dir_t::D) ||
+			(prev_dir == matrix_dir_t::H && !can_come_from_H) ||
+			(prev_dir == matrix_dir_t::V && !can_come_from_V)))
+			curr_dir = matrix_dir_t::D;
+		else if (can_come_from_H && (
+			(prev_dir == matrix_dir_t::H) ||
+			(prev_dir == matrix_dir_t::D && !can_come_from_D) ||
+			(prev_dir == matrix_dir_t::V && !can_come_from_V)))
+			curr_dir = matrix_dir_t::H;
+		else
+			curr_dir = matrix_dir_t::V;
+
+		if (curr_dir == matrix_dir_t::D)
+		{
+			if (tmp_read_sequence[read_pos] == tmp_ref_sequence[pos - 1]) {
+				// match
+				affine_score += scoring.match; //quality_reader[read_pos];
+				ext_cigar[cigar_pos++] = '.';
 			}
 			else {
-				// insertion
-				if (inIndel) {
-					affine_score += scoring.gap_extend;
-				} else {
-					affine_score += scoring.gap_open;
-					++num_events;
-					inIndel = true;
-				}
-
-				ext_cigar[cigar_pos++] = decode[tmp_read_sequence[read_pos]];
-				ext_cigar[cigar_pos++] = '#';
-				--read_pos;
-				c_val = v_val;
+				// mismatch
+				affine_score += scoring.mismatch; //quality_reader[read_pos];
+				ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos - 1]];
 			}
+
+			inIndel = false;
+			--read_pos;
+			--pos;
+			c_val = d_val;
 		}
+		else if (curr_dir == matrix_dir_t::H)
+		{
+			// deletion
+			if (inIndel) {
+				affine_score += scoring.gap_del_extend;
+			}
+			else {
+				affine_score += scoring.gap_del_open;
+				++num_events;
+				inIndel = true;
+			}
+
+			ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos - 1]];
+			ext_cigar[cigar_pos++] = '^';
+			--pos;
+			c_val = h_val;
+		}
+		else
+		{
+			// insertion
+			if (inIndel) {
+				affine_score += scoring.gap_ins_extend;
+			}
+			else {
+				affine_score += scoring.gap_ins_open;
+				++num_events;
+				inIndel = true;
+			}
+
+			ext_cigar[cigar_pos++] = decode[tmp_read_sequence[read_pos]];
+			ext_cigar[cigar_pos++] = '#';
+			--read_pos;
+			c_val = v_val;
+		}
+
+		prev_dir = curr_dir;
 	}
 
 	while (read_pos)
@@ -296,11 +365,11 @@ ref_pos_t LevMyers256<instruction_set>::getExtCigar(uchar_t *ext_cigar, uchar_t*
 		// insertion
 		if (inIndel) 
 		{
-			affine_score += scoring.gap_extend;
+			affine_score += scoring.gap_ins_extend;
 		}
 		else 
 		{
-			affine_score += scoring.gap_open;
+			affine_score += scoring.gap_ins_open;
 			++num_events;
 			inIndel = true;
 		}
@@ -320,6 +389,7 @@ ref_pos_t LevMyers256<instruction_set>::getExtCigar(uchar_t *ext_cigar, uchar_t*
 #ifdef _DEVELOPMENT_MODE
 template <instruction_set_t instruction_set>
 void LevMyers256<instruction_set>::save(const std::string& filename) {
+
 
 	std::ofstream file(filename);
 

@@ -14,18 +14,20 @@
 #define _RESULTS_H
 
 #include "../common/defs.h"
-#include "../common/idstore.h"
-#include "../common/queue.h"
-#include "../common/mmgr.h"
-#include "../common/stats.h"
 #include "../common/types.h"
-#include "../common/params.h"
-#include "../common/joiner_mgr.h"
+#include "idstore.h"
+#include "queue.h"
+#include "mmgr.h"
+#include "stats.h"
+#include "../common/types.h"
+#include "params.h"
+#include "joiner_mgr.h"
 
 #include <vector>
 #include <algorithm>
 
 using namespace std;
+
 
 // ************************************************************************************
 class CMappingsHeapGatherer
@@ -33,18 +35,19 @@ class CMappingsHeapGatherer
 	size_t max_size;
 	size_t size;
 
-	vector<uint64_t> v_mappings;
+	vector<candidate_mapping_t> v_mappings;
 
 public:
 	CMappingsHeapGatherer(size_t _max_size = 1);
 	void Clear(size_t _max_size);
-	void Push(uint32_t pos, genome_t direction, uint32_t no_errors);
+	void Push(candidate_mapping_t& mapping);
 	bool Empty();
-	uint64_t Pop();
-	uint64_t PopUnsorted();
+	candidate_mapping_t Pop();
+	candidate_mapping_t PopUnsorted();
 
 	uint32_t DecodePos(uint64_t x) const;
 	uint32_t DecodeNoErrors(uint64_t x) const;
+	uint32_t DecodeIndelMarker(uint64_t) const;
 	genome_t DecodeDir(uint64_t x) const;
 };
 
@@ -73,6 +76,7 @@ class CMappingResultsCollector
 	read_id_t prev_read_id;
 	uint32_t cur_read_count;
 	uint32_t true_read_count;
+	uchar_t* cur_read_counter_ptr;
 
 	uint64_t push_counter;
 	uint64_t push_unique_counter;
@@ -83,7 +87,7 @@ public:
 	CMappingResultsCollector(CParams *params, CObjects *objects, uint32_t _stage_id);
 	~CMappingResultsCollector();
 
-	void Push(read_id_t id, ref_pos_t pos, genome_t direction, uint32_t no_differences);
+	void Push(read_id_t id, candidate_mapping_t mapping);
 	void Complete();
 };
 

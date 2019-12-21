@@ -15,11 +15,11 @@
 
 #include "../common/defs.h"
 #include "../common/utils.h"
-#include "../common/mmgr.h"
-#include "../common/queue.h"
-#include "../common/stats.h"
+#include "mmgr.h"
+#include "queue.h"
+#include "stats.h"
 #include "../common/timer.h"
-#include "../common/params.h"
+#include "params.h"
 #include "reads.h"
 #include <memory>
 #include <list>

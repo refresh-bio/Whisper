@@ -9,8 +9,9 @@
 // License : GNU GPL 3
 // *******************************************************************************************
 
-
+#pragma warning (disable: 6263 6255)
 #include "soft_clipping.h"
+#include "simd_utils.h"
 #include <algorithm>
 
 #define HI_NIBBLE(x)		((x) >> 4)
@@ -23,10 +24,20 @@ const uint32_t HashTable::EMPTY_CELL = ~(0u);
 const uint32_t HashTable::hash_len = 20;
 
 // ************************************************************************************
-CSoftClipping::CSoftClipping(uint32_t _max_query_len, uint32_t _max_text_len)
+CSoftClipping::CSoftClipping(uint32_t _max_query_len, uint32_t _max_text_len, uint32_t _min_approx_indel_len, uint32_t _max_approx_indel_len, uint32_t _max_approx_indel_mismatches)
 {
 	max_query_len = _max_query_len;
 	max_text_len = _max_text_len;
+	min_approx_indel_len = _min_approx_indel_len;
+	max_approx_indel_len = _max_approx_indel_len;
+	max_approx_indel_mismatches = _max_approx_indel_mismatches;
+
+	alloc_text_M = 0;
+	cur_offset = 0;
+	query_len = 0;
+	ref_ptr = nullptr;
+	ref_size = 0;
+	seq_len = 0;
 
 	uint32_t ht_size;
 	for (ht_size = 256; ht_size / max_query_len < 50; ht_size *= 2)
@@ -41,6 +52,7 @@ CSoftClipping::CSoftClipping(uint32_t _max_query_len, uint32_t _max_text_len)
 	rev_comp_code[5] = 5;
 	rev_comp_code[6] = 6;
 	rev_comp_code[7] = 7;
+	fill_n(rev_comp_code + 8, 8, 7);
 
 	for (int i = 0; i < 128; ++i)
 	{
@@ -66,13 +78,43 @@ CSoftClipping::CSoftClipping(uint32_t _max_query_len, uint32_t _max_text_len)
 	code2symbol[(int32_t)sym_code_T] = 'T';
 	code2symbol[(int32_t)sym_code_N_read] = 'N';
 	code2symbol[(int32_t)sym_code_N_ref] = 'N';
+	fill_n(code2symbol + 8, 8, 'N');
 
 	query.resize(max_query_len);
 
-		// FIXME: + 10
-	genome_prefetch = new uchar_t[std::max(max_query_len, max_text_len) + 10];
+	// FIXME: + 10
+	genome_prefetch = new uchar_t[std::max(max_query_len, max_text_len) + 10ull];
 
-	checked_pos.resize(std::max(max_query_len, max_text_len) + 10);
+	checked_pos_left.resize(std::max(max_query_len, max_text_len) + 10ull);
+	checked_pos_right.resize(std::max(max_query_len, max_text_len) + 10ull);
+
+	instruction_set_t instruction_set;
+	int x = instrset_detect();
+	if (x >= 0 && x <= 8)
+		instruction_set = (instruction_set_t)x;
+	else if (x < 0)
+		instruction_set = instruction_set_t::none;
+	else
+		instruction_set = instruction_set_t::avx2;
+
+	switch (instruction_set) {
+	case instruction_set_t::none:
+	case instruction_set_t::sse:
+		throw new std::runtime_error("SSE2 extensions required!");
+	case instruction_set_t::sse2:
+	case instruction_set_t::sse3:
+	case instruction_set_t::sse3s:
+	case instruction_set_t::sse41:
+	case instruction_set_t::sse42:
+		ptr_PrefetchDecompressed = PrefetchDecompressed128<instruction_set_t::sse2>;
+		break;
+	case instruction_set_t::avx:
+		ptr_PrefetchDecompressed = PrefetchDecompressed128<instruction_set_t::avx>;
+		break;
+	case instruction_set_t::avx2:
+		ptr_PrefetchDecompressed = PrefetchDecompressed256;
+		break;
+	}
 }
 
 // ************************************************************************************
@@ -187,24 +229,15 @@ bool CSoftClipping::preprocessRawSeq(uchar_t *seq, uint32_t seq_len, genome_t or
 
 // ************************************************************************************
 bool CSoftClipping::match(ref_pos_t ref_pos, uint32_t max_distance_in_ref, uint32_t min_exact_len, ref_pos_t &pos, uint32_t &left_clipping, uint32_t &right_clipping,
-	uint32_t &left_match, uint32_t &right_match, int32_t &del_size)
+	uint32_t &left_match, uint32_t &right_match, int32_t &del_size, uint32_t &no_mismatches)
 {
 	uint32_t j;
-//	uint32_t left_end_index_in_gen = ref_pos;
 	
-	// Genome prefetch
-	uchar_t * __restrict ptr = genome_prefetch;
-	uchar_t *genome_ptr = ref_ptr + (ref_pos >> 1);
-	uint32_t text_len_div2 = (max_distance_in_ref + 3) / 2;
+	no_mismatches = 0;	// set default
 
-	*ptr++ = 7;			// No symbol
-	if (ref_pos & 1)
-		*ptr++ = *genome_ptr++ & 0x0f;
-	for (uint32_t i = 0; i < text_len_div2; ++i)
-	{
-		*ptr++ = *genome_ptr >> 4;
-		*ptr++ = *genome_ptr++ & 0x0f;
-	}
+	// Genome prefetch
+	genome_prefetch[0] = 7;		// no symbol
+	(*ptr_PrefetchDecompressed)(genome_prefetch + 1, ref_ptr + (ref_pos >> 1), max_distance_in_ref + max_query_len + 3, ref_pos & 1);
 
 	clear_ckecked_pos();
 
@@ -233,7 +266,7 @@ bool CSoftClipping::match(ref_pos_t ref_pos, uint32_t max_distance_in_ref, uint3
 		uint32_t ht_pos = ht.get_pos(key);
 
 		bool first = true;
-
+		
 		while ((pos_in_query = ht.atPosition(ht_pos)) != ht.EMPTY_CELL)
 		{
 			++ht_hits;
@@ -245,7 +278,7 @@ bool CSoftClipping::match(ref_pos_t ref_pos, uint32_t max_distance_in_ref, uint3
 			if (pos_in_text_of_query_front <= max_distance_in_ref)
 			{
 				int32_t len = 0;
-				if (checked_pos[pos_in_text_of_query_front] + 1 != pos_in_query)
+				if (checked_pos_left[pos_in_text_of_query_front] + 1 != pos_in_query)
 				{
 					uchar_t* qq = query.data() + pos_in_query;
 					uchar_t* gg = genome_prefetch + pos_in_text;
@@ -275,13 +308,17 @@ bool CSoftClipping::match(ref_pos_t ref_pos, uint32_t max_distance_in_ref, uint3
 						{
 							int32_t text_dist = (int32_t)(pos_in_text + len) - (int32_t)left_text_pos;
 
-							if (left_exact_len + len >= (int32_t) query_len)		// deletion
+							// Check indel + exact match
+							bool exact_found = false;
+
+							if (left_exact_len + len >= (int32_t)query_len)		// deletion
 							{
 								left_exact_len -= left_exact_len + len - query_len;
 
-								if (text_dist > (int32_t) query_len)
+								if (text_dist > (int32_t)query_len)
 								{
 									int32_t score = (int32_t)query_len - (text_dist - (int32_t)query_len);
+									exact_found = true;
 
 									if (score > best_score)
 									{
@@ -292,12 +329,15 @@ bool CSoftClipping::match(ref_pos_t ref_pos, uint32_t max_distance_in_ref, uint3
 										best_text_pos = left_text_pos;
 										left_exact_len = 0;
 										best_exact_len = 0;
+										no_mismatches = 0;
 									}
 								}
 							}
 							else if (left_exact_len + len == text_dist)	// insertion
 							{
 								int32_t score = text_dist;
+								exact_found = true;
+
 								if (score > best_score)
 								{
 									best_score = score;
@@ -307,16 +347,108 @@ bool CSoftClipping::match(ref_pos_t ref_pos, uint32_t max_distance_in_ref, uint3
 									best_text_pos = left_text_pos;
 									left_exact_len = 0;
 									best_exact_len = 0;
+									no_mismatches = 0;
 								}
 							}
+
+							// Look for indel + approx match (only mismatches allowed outside the indel)
+							int potential_indel_len = abs((int)text_dist - (int)query_len);
+							if (!exact_found && potential_indel_len >= (int) min_approx_indel_len && potential_indel_len <= (int) max_approx_indel_len &&
+								checked_pos_right[pos_in_text_of_query_front] != query_len)
+							{
+								// Count mismatches from left
+								uint32_t *left_mismatches = (uint32_t*) alloca(sizeof(uint32_t) * (query_len + 1ull));
+								uint32_t max_cmp_dist = min((uint32_t)text_dist, query_len);
+
+								uchar_t* qq = query.data();
+								uchar_t* gg = genome_prefetch + left_text_pos;
+
+								left_mismatches[0] = 0;
+								for (uint32_t i = 0; i < max_cmp_dist; ++i)
+									left_mismatches[i + 1] = left_mismatches[i] + (qq[i] != gg[i]);
+
+								// Count mismatches from right
+								uint32_t *right_mismatches = (uint32_t*)alloca(sizeof(uint32_t) * (query_len + 1ull));
+								qq = query.data() + query_len - 1;
+//								gg = genome_prefetch + pos_in_text + len - 1;
+								gg = genome_prefetch + left_text_pos + text_dist - 1;
+
+								right_mismatches[0] = 0;
+								for (uint32_t i = 0; i < max_cmp_dist; ++i)
+									right_mismatches[i + 1] = right_mismatches[i] + (*(qq-i) != *(gg-i));
+
+								if (text_dist > (int) query_len)
+								{
+									// Deletion
+									int mid_point = 0;
+									int best_val_mid = query_len + 1;
+									for (int i = 0; i <= (int) query_len; ++i)
+									{
+										if (left_mismatches[i] + right_mismatches[query_len - i] < (uint32_t) best_val_mid)
+										{
+											best_val_mid = left_mismatches[i] + right_mismatches[query_len - i];
+											mid_point = i;
+										}
+									}
+
+									if (best_val_mid <= (int) max_approx_indel_mismatches)
+									{
+										int32_t score = (int32_t)query_len - (text_dist - (int32_t)query_len) - best_val_mid;
+										if (score > best_score)
+										{
+											best_score = score;
+											best_left_len = mid_point;
+											best_right_len = query_len - mid_point;
+											best_query_pos = 0;
+											best_text_pos = left_text_pos;
+											left_exact_len = 0;
+											best_exact_len = 0;
+											no_mismatches = best_val_mid;
+										}
+									}
+								}
+								else
+								{
+									// Insertion
+									int mid_point = 0;
+									int best_val_mid = query_len + 1;
+									int del_len = query_len - text_dist;
+									for (int i = 0; i <= (int) query_len - del_len; ++i)
+									{
+										if (left_mismatches[i] + right_mismatches[text_dist - i] < (uint32_t) best_val_mid)
+										{
+											best_val_mid = left_mismatches[i] + right_mismatches[text_dist - i];
+											mid_point = i;
+										}
+									}
+									if (best_val_mid <= (int) max_approx_indel_mismatches)
+									{
+										int32_t score = text_dist - best_val_mid;
+										if (score > best_score)
+										{
+											best_score = score;
+											best_left_len = mid_point;
+											best_right_len = text_dist - mid_point;
+											best_query_pos = 0;
+											best_text_pos = left_text_pos;
+											left_exact_len = 0;
+											best_exact_len = 0;
+											no_mismatches = best_val_mid;
+										}
+									}
+								}
+							}
+
+							checked_pos_right[pos_in_text_of_query_front] = query_len;
+							checked_pos_right_log.emplace_back(pos_in_text_of_query_front);
 						}
 					}
 				}
 				
 				if (len >= (int32_t) min_exact_len)											// Do not mark for fake matches 
 				{
-					checked_pos[pos_in_text_of_query_front] = pos_in_query;			// Mark that this position in text was already verified
-					checked_pos_log.emplace_back(pos_in_text_of_query_front);
+					checked_pos_left[pos_in_text_of_query_front] = pos_in_query;			// Mark that this position in text was already verified
+					checked_pos_left_log.emplace_back(pos_in_text_of_query_front);
 				}
 				first = false;
 			}
@@ -345,9 +477,15 @@ bool CSoftClipping::match(ref_pos_t ref_pos, uint32_t max_distance_in_ref, uint3
 		left_match = best_left_len;
 		right_match = best_right_len;
 		if (best_left_len + best_right_len == query_len)
-			del_size = query_len - best_score;
+			del_size = query_len - (best_score + no_mismatches);
 		else
 			del_size = -(int32_t)(query_len - left_match - right_match);
+
+		if (abs(del_size) > 2 * max_approx_indel_len)
+			return false;
+
+//		cerr << "Clipping indel: "s + "(" + to_string(left_match) + "," + to_string(right_match) + ")    pos: " + to_string(best_text_pos) + "   read_len: " + to_string(query_len) + 
+//			(query_len - left_match - right_match != 0 ? "  ins " : "") + "\n";
 	}
 
 	return true;
@@ -356,7 +494,7 @@ bool CSoftClipping::match(ref_pos_t ref_pos, uint32_t max_distance_in_ref, uint3
 // ************************************************************************************
 void CSoftClipping::getExtCigar(
 	uchar_t *ext_cigar, const uchar_t* tmp_ref_sequence, const uchar_t* tmp_read_sequence, ref_pos_t pos, uint32_t seq_len,
-	uint32_t left_clipping, uint32_t right_clipping, uint32_t left_match, uint32_t right_match, int32_t del_size, 
+	uint32_t left_clipping, uint32_t right_clipping, uint32_t left_match, uint32_t right_match, int32_t del_size, uint32_t no_mismatches,
 	const scoring_t &scoring, double& affine_score)
 {
 	const char *decode = "ACGTNNXX";	
@@ -367,23 +505,39 @@ void CSoftClipping::getExtCigar(
 		std::fill(ext_cigar + seq_len - right_clipping, ext_cigar + seq_len, '$');
 		ext_cigar[seq_len] = 0;
 
-		/*
+		for (int i = left_clipping; i < seq_len - right_clipping; ++i)
+			if (tmp_ref_sequence[pos + i] != tmp_read_sequence[i + 1])
+				cerr << "!!!\n";
+			   		 
 		affine_score = (seq_len - left_clipping - right_clipping) * scoring.match +
 			((left_clipping > 0) ? scoring.clipping : 0) +
 			((right_clipping > 0) ? scoring.clipping : 0);
-		*/
+	}
+	else 
+	{
+		int cigar_pos = 0;
+		int read_pos = 0;
 
-		affine_score = (seq_len - left_clipping - right_clipping) * scoring.match +
-			((left_clipping > 0) ? scoring.gap_open + (left_clipping - 1) * scoring.gap_extend : 0) +
-			((right_clipping > 0) ? scoring.gap_open + (right_clipping - 1) * scoring.gap_extend : 0);
-
-	} else {
-		
-		std::fill(ext_cigar, ext_cigar + left_match, '.');
-		
-		int cigar_pos = left_match;
-		int read_pos = left_match;
-		pos += left_match;
+		if (no_mismatches)
+		{
+			for (int i = 0; i < (int) left_match; ++i, ++pos, ++read_pos)
+			{
+				if (tmp_ref_sequence[pos] == tmp_read_sequence[read_pos + 1])
+					ext_cigar[cigar_pos++] = '.';
+				else
+				{
+					ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos]];
+//					++no_mismatches;
+				}
+			}
+		}
+		else
+		{
+			std::fill(ext_cigar, ext_cigar + left_match, '.');
+			cigar_pos += left_match;
+			read_pos += left_match;
+			pos += left_match;
+		}
 		
 		if (del_size > 0) {
 			// deletion wrt reference - write corresponding reference symbols
@@ -394,32 +548,55 @@ void CSoftClipping::getExtCigar(
 		}
 		else {
 			// insertion wrt reference - write corresponding read symbols
-			
-
 			for (int i = 0; i < -del_size; ++i, ++read_pos) {
 				ext_cigar[cigar_pos++] = '#';
 				ext_cigar[cigar_pos++] = decode[tmp_read_sequence[read_pos + 1]];
 			}
 		}
 
-		affine_score = (left_match + right_match) * scoring.match +
-			scoring.gap_open + (abs(del_size) - 1) * scoring.gap_extend;
+		if (no_mismatches)
+		{
+			for (int i = 0; i < (int) right_match; ++i, ++pos, ++read_pos)
+			{
+				if (tmp_ref_sequence[pos] == tmp_read_sequence[read_pos + 1])
+					ext_cigar[cigar_pos++] = '.';
+				else
+				{
+					ext_cigar[cigar_pos++] = decode[tmp_ref_sequence[pos]];
+//					++no_mismatches;
+				}
+			}
+		}
+		else
+		{
+			std::fill(ext_cigar + cigar_pos, ext_cigar + cigar_pos + right_match, '.');
+			cigar_pos += right_match;
+		}
 
-		std::fill(ext_cigar + cigar_pos, ext_cigar + cigar_pos + right_match, '.');
-		cigar_pos += right_match;
 		ext_cigar[cigar_pos] = 0;
+
+		affine_score = ((int64_t) left_match + right_match - no_mismatches) * scoring.match +
+			no_mismatches * scoring.mismatch;
+
+		if(del_size > 0)
+			affine_score +=	scoring.gap_del_open + (abs(del_size) - 1ll) * scoring.gap_del_extend;
+		else if(del_size < 0)
+			affine_score += scoring.gap_ins_open + (abs(del_size) - 1ll) * scoring.gap_ins_extend;
 	}
 }
 
 // ************************************************************************************
-void CSoftClipping::clipIllegalPositions(mapping_desc_t& mapping, const scoring_t& scoring, const std::vector<seq_desc_t>& seq_desc, CMemoryPool<uchar_t>& mp_ext_cigar) {
-
+void CSoftClipping::clipIllegalPositions(mapping_desc_t& mapping, const scoring_t& scoring, const std::vector<seq_desc_t>& seq_desc, CMemoryPool<uchar_t>& mp_ext_cigar) 
+{
 	auto& ref_desc = seq_desc[mapping.ref_seq_id];
-	int32_t ref_size = ref_desc.size + ref_desc.no_final_Ns + ref_desc.no_initial_Ns;
+	int32_t ref_size = (int32_t) (ref_desc.size + ref_desc.no_final_Ns + ref_desc.no_initial_Ns);
 	int32_t mapping_last = mapping.ref_seq_pos + mapping.ref_length - 1;
 
 	int toClipLeft = 0;
 	int toClipRight = 0;
+
+	int i_read = 0;
+	int i_ref = mapping.ref_seq_pos;
 
 	if (mapping.ref_seq_pos <= 0) {
 		toClipLeft = -mapping.ref_seq_pos + 1;
@@ -431,7 +608,7 @@ void CSoftClipping::clipIllegalPositions(mapping_desc_t& mapping, const scoring_
 
 	if (toClipLeft || toClipRight) {
 		// fixme: perfect matching outside chromosome - this shouldn't happen
-		if (mapping.method == MatchingMethod::Perfect || mapping.method == MatchingMethod::PerfectDistant) {
+		if (mapping.method == MatchingMethod::Enumeration::Perfect || mapping.method == MatchingMethod::Enumeration::PerfectDistant) {
 			mp_ext_cigar.Reserve(mapping.ext_cigar);
 			std::fill(mapping.ext_cigar, mapping.ext_cigar + mapping.read_length, '.');
 			mapping.ext_cigar[mapping.read_length] = 0;
@@ -439,75 +616,160 @@ void CSoftClipping::clipIllegalPositions(mapping_desc_t& mapping, const scoring_
 		
 		mapping.left_clipping += toClipLeft;
 		mapping.right_clipping += toClipRight;
-		mapping.err_edit_distance -= toClipLeft + toClipRight;
-
 		mapping.ref_length -= toClipLeft + toClipRight;
 		mapping.ref_seq_pos += toClipLeft;
+		mapping.err_edit_distance = 0;
+		mapping.score = 0;
 
-		mapping.score -= (toClipLeft + toClipRight) * (scoring.error + scoring.match);
+		// only mismatches can be present as boundary mappings --- !!! z jakiegoœ powodu to za³o¿enie nie jest ju¿ spe³nione
+		uchar_t *in = mapping.ext_cigar;
+		uchar_t *out = in;
 
-		// only mismatches can be present as boundary mappings
-		uchar_t * in = mapping.ext_cigar;
-		while (toClipLeft) {
-			*in++ = '$';
-			--toClipLeft;
-		}
-
-		if (toClipRight) {
-			in = mapping.ext_cigar + std::strlen(reinterpret_cast<char*>(mapping.ext_cigar)) - toClipRight;
-			while (toClipRight) {
-				*in++ = '$';
-				--toClipRight;
+		// Clip before 1st position in chromosome
+		while(i_ref < 1 && *in)
+		{
+			if (*in == '^')
+			{
+				in += 2;
+				++i_ref;
+			}
+			else if (*in == '#')
+			{
+				in += 2;
+				*out++ = '$';
+				++i_read;
+			}
+			else
+			{
+				++in;
+				*out++ = '$';
+				++i_read;
+				++i_ref;
 			}
 		}
+
+		// Copy correctly mapped read part
+		bool gap_opened = false;
+		while(i_read < mapping.read_length && i_ref <= ref_size && *in)
+		{
+			if (*in == '^')
+			{
+				*out++ = *in++;
+				*out++ = *in++;
+				++i_ref;
+				mapping.err_edit_distance++;
+
+				if (gap_opened)
+					mapping.score += scoring.gap_del_extend;
+				else
+				{
+					mapping.score += scoring.gap_del_open;
+					gap_opened = true;
+				}
+			}
+			else if (*in == '#')
+			{
+				*out++ = *in++;
+				*out++ = *in++;
+				++i_read;
+				mapping.err_edit_distance++;
+
+				if (gap_opened)
+					mapping.score += scoring.gap_ins_extend;
+				else
+				{
+					mapping.score += scoring.gap_ins_open;
+					gap_opened = true;
+				}
+			}
+			else
+			{
+				if (*in == '.')
+					mapping.score += scoring.match;
+				else
+				{
+					mapping.score += scoring.mismatch;
+					mapping.err_edit_distance++;
+				}
+				*out++ = *in++;
+				++i_read;
+				++i_ref;
+
+				gap_opened = false;
+			}
+		}
+
+		// Clip part of the read out of the end of the chromosome
+		while (i_read < mapping.read_length && *in)
+		{
+			if (*in == '^')
+			{
+				in += 2;
+				+i_ref;
+			}
+			else if (*in == '#')
+			{
+				in += 2;
+				*out++ = '$';
+				++i_read;
+			}
+			else
+			{
+				*out++ = '$';
+				++i_read;
+				++i_ref;
+			}
+		}
+
+		*out = 0;
 	}
 }
 
 // ************************************************************************************
-void CSoftClipping::clipLowQualityPositions(mapping_desc_t& mapping, const uchar_t* quality) {
+void CSoftClipping::clipLowQualityPositions(mapping_desc_t& mapping_desc, const uchar_t* quality) {
 	
-	if (mapping.err_edit_distance == 0)
+	if (mapping_desc.err_edit_distance == 0)
 		return;
 
-	uint32_t max_clipping = mapping.read_length - 20;
+	uint32_t max_clipping = mapping_desc.read_length - 20;
 
-	string_reader_t quality_reader(quality, mapping.read_length, mapping.dir);
+	string_reader_t quality_reader(quality, mapping_desc.read_length, mapping_desc.mapping.direction);
 
 	// left side
-	uchar_t* in = mapping.ext_cigar + mapping.left_clipping;
+	uchar_t* in = mapping_desc.ext_cigar + mapping_desc.left_clipping;
 	uchar_t * out = in;
 
-	while ((quality_reader[mapping.left_clipping] <= '#') && (((uint32_t) (mapping.left_clipping + mapping.right_clipping)) <= max_clipping)) {
+	while ((quality_reader[mapping_desc.left_clipping] <= '#') && (((uint32_t) (mapping_desc.left_clipping + mapping_desc.right_clipping)) <= max_clipping)) {
 		if (*in == '.') {
 			// match - clip position, move in read and reference
 			*out++ = '$';
 			++in;
-			++mapping.left_clipping;
-			++mapping.ref_seq_pos;
-			--mapping.ref_length;
+			++mapping_desc.left_clipping;
+			++mapping_desc.ref_seq_pos;
+			--mapping_desc.ref_length;
 		}
 		else if (*in == '#') {
 			// insertion - clip position, move in read, decrese edit distance
 			*out++ = '$';
 			in += 2;
-			++mapping.left_clipping;
-			--mapping.err_edit_distance;
+			++mapping_desc.left_clipping;
+			--mapping_desc.err_edit_distance;
 		}
 		else if (*in == '^') {
 			// deletion - omit position, move in reference, decrese edit distance
 			in += 2;
-			++mapping.ref_seq_pos;
-			--mapping.ref_length;
-			--mapping.err_edit_distance;
+			++mapping_desc.ref_seq_pos;
+			--mapping_desc.ref_length;
+			--mapping_desc.err_edit_distance;
 		}
 		else if (isalpha(*in)) {
 			// mismatch - clip position, move in read and reference, decrese edit distance
 			*out++ = '$';
 			++in;
-			++mapping.left_clipping;
-			++mapping.ref_seq_pos;
-			--mapping.ref_length;
-			--mapping.err_edit_distance;
+			++mapping_desc.left_clipping;
+			++mapping_desc.ref_seq_pos;
+			--mapping_desc.ref_length;
+			--mapping_desc.err_edit_distance;
 		}
 	}
 
@@ -516,39 +778,39 @@ void CSoftClipping::clipLowQualityPositions(mapping_desc_t& mapping, const uchar
 	}
 
 	// right side
-	in = mapping.ext_cigar + std::strlen(reinterpret_cast<char*>(mapping.ext_cigar)) - mapping.right_clipping - 1;
+	in = mapping_desc.ext_cigar + std::strlen(reinterpret_cast<char*>(mapping_desc.ext_cigar)) - mapping_desc.right_clipping - 1;
 	out = in;
 
-	while ((quality_reader[mapping.read_length - mapping.right_clipping - 1] <= '#') && (mapping.left_clipping + mapping.right_clipping <= max_clipping)) {
+	while ((quality_reader[mapping_desc.read_length - mapping_desc.right_clipping - 1] <= '#') && ((uint32_t) mapping_desc.left_clipping + mapping_desc.right_clipping <= max_clipping)) {
 		if (*in == '.') {
 			// match - clip position, move in read and reference
 			*out-- = '$';
 			--in;
-			++mapping.right_clipping;
-			--mapping.ref_length;
+			++mapping_desc.right_clipping;
+			--mapping_desc.ref_length;
 		}
 		else if (isalpha(*in)) {
 			if (*(in - 1) == '#') {
 				// insertion - clip position, move in read, decrese edit distance
 				*out-- = '$';
 				in -= 2;
-				++mapping.right_clipping;
-				--mapping.err_edit_distance;
+				++mapping_desc.right_clipping;
+				--mapping_desc.err_edit_distance;
 			}
 			else if (*(in - 1) == '^') {
 				// deletion - omit position, move in reference, decrese edit distance
 				in -= 2;
-				--mapping.ref_length;
-				--mapping.err_edit_distance;
+				--mapping_desc.ref_length;
+				--mapping_desc.err_edit_distance;
 			}
 			else {
 
 				// mismatch - clip position, move in read and reference, decrese edit distance
 				*out-- = '$';
 				--in;
-				++mapping.right_clipping;
-				--mapping.ref_length;
-				--mapping.err_edit_distance;
+				++mapping_desc.right_clipping;
+				--mapping_desc.ref_length;
+				--mapping_desc.err_edit_distance;
 			}
 		}
 	}
@@ -559,9 +821,9 @@ void CSoftClipping::clipLowQualityPositions(mapping_desc_t& mapping, const uchar
 }
 
 // ************************************************************************************
-void  CSoftClipping::clipBoundaryPositions(mapping_desc_t& mapping, const scoring_t& scoring) 
+void  CSoftClipping::clipBoundaryPositions(mapping_desc_t& mapping_desc, const scoring_t& scoring)
 {		
-	if (mapping.err_edit_distance == 0)
+	if (mapping_desc.err_edit_distance == 0)
 		return;
 	
 	std::pair<int, double> mini{ -1, std::numeric_limits<double>::max() };
@@ -570,155 +832,162 @@ void  CSoftClipping::clipBoundaryPositions(mapping_desc_t& mapping, const scorin
 	double cur = 0;
 
 	// consider clipping penalty only once
-	double leftPenalty = mapping.left_clipping > 0 ? 0 : scoring.clipping;
-	double rightPenalty = mapping.right_clipping > 0 ? 0 : scoring.clipping;
+	double leftPenalty = mapping_desc.left_clipping > 0 ? 0 : scoring.clipping;
+	double rightPenalty = mapping_desc.right_clipping > 0 ? 0 : scoring.clipping;
 
 	// left side
-	uchar_t* in = mapping.ext_cigar + mapping.left_clipping;
+	uchar_t* in = mapping_desc.ext_cigar + mapping_desc.left_clipping;
 	uchar_t * out = in;
 	bool inIndel = false;
-
-	int readPos = 0;
-	int refPos = 0;
-
-	for (int i = 0; i < std::max(mapping.read_length, mapping.ref_length) ; ++i) {
+	int indel_len = 0;
+	int cigarPos = 0;
+	
+	// iterate until end of cigar
+	for (cigarPos = 0; *in && *in != '$'; ++cigarPos) { // consider only part of cigar before existing right clipping
 		if (*in == '.') {
 			// match 
 			cur += scoring.match;
 			inIndel = false;
+			indel_len = 0;
 			++in;
-			++refPos;
-			++readPos;
 		}
 		else if (*in == '#') {
 			// insertion wrt reference
-			cur += inIndel ? scoring.gap_extend : scoring.gap_open;
+			cur += inIndel ? scoring.gap_ins_extend : scoring.gap_ins_open;
 			inIndel = true;
 			in += 2;
-			++readPos;
+			++indel_len;
+			++cigarPos;
 		}
 		else if (*in == '^') {
 			// deletion wrt reference
-			cur += inIndel ? scoring.gap_extend : scoring.gap_open;
+			cur += inIndel ? scoring.gap_del_extend : scoring.gap_del_open;
 			inIndel = true;
 			in += 2;
-			++refPos;
+			++indel_len;
+			++cigarPos;
 		}
 		else if (isalpha(*in)) {
 			// mismatch
 			cur += scoring.mismatch;
 			inIndel = false;
+			indel_len = 0;
 			++in;
-			++refPos;
-			++readPos;
 		}
 
 		if (cur < mini.second) {
-			mini.first = i;
+			mini.first = cigarPos;
 			mini.second = cur;
 		}
 
 		if (cur > maxi.second) {
-			maxi.first = i;
+			maxi.first = cigarPos;
 			maxi.second = cur;
 		}
 	}
 
-	// left clipping
-	if (mini.second + leftPenalty > 0) {
+	if (mini.first + 20 > maxi.first)
+		return;
 
-		in = mapping.ext_cigar + mapping.left_clipping;
+	int no_clippings = 0;
 
-		for (int i = 0; i < mini.first + 1; ++i) { // clip up to mini position
+	// right clipping
+	if (maxi.second + rightPenalty > cur) {
+		++no_clippings;
+
+		in = mapping_desc.ext_cigar + mapping_desc.left_clipping + maxi.first + 1;
+		out = in;
+
+		while (*in && *in != '$') { // consider only part of cigar before existing right clipping
 			if (*in == '.') {
 				// match - clip position, move in read and reference
 				*out++ = '$';
 				++in;
-				++mapping.left_clipping;
-				++mapping.ref_seq_pos;
-				--mapping.ref_length;
-		
+				++mapping_desc.right_clipping;
+				--mapping_desc.ref_length;
 			}
 			else if (*in == '#') {
 				// insertion - clip position, move in read, decrese edit distance
 				*out++ = '$';
 				in += 2;
-				++mapping.left_clipping;
-				--mapping.err_edit_distance;
-			
+				++mapping_desc.right_clipping;
+				--mapping_desc.err_edit_distance;
 			}
 			else if (*in == '^') {
 				// deletion - omit position, move in reference, decrese edit distance
 				in += 2;
-				++mapping.ref_seq_pos;
-				--mapping.ref_length;
-				--mapping.err_edit_distance;
-			
+				--mapping_desc.ref_length;
+				--mapping_desc.err_edit_distance;
 			}
 			else if (isalpha(*in)) {
 				// mismatch - clip position, move in read and reference, decrese edit distance
 				*out++ = '$';
 				++in;
-				++mapping.left_clipping;
-				++mapping.ref_seq_pos;
-				--mapping.ref_length;
-				--mapping.err_edit_distance;
+				++mapping_desc.right_clipping;
+				--mapping_desc.ref_length;
+				--mapping_desc.err_edit_distance;
 			}
 		}
 
+		// rewrite remaining characters (pre-existing $) if any 
 		while (*in) {
 			*out++ = *in++;
 		}
+
+		*out = 0;
+	}
+	
+	// left clipping
+	if (mini.second < leftPenalty) {
+		++no_clippings;
+
+		in = mapping_desc.ext_cigar + mapping_desc.left_clipping;
+		out = in;
+		auto guard = in + mini.first + 1; // clip up to mini position
+		
+		while (in != guard) {
+			if (*in == '.') {
+				// match - clip position, move in read and reference
+				*out++ = '$';
+				++in;
+				++mapping_desc.left_clipping;
+				++mapping_desc.ref_seq_pos;
+				--mapping_desc.ref_length;
+			}
+			else if (*in == '#') {
+				// insertion - clip position, move in read, decrese edit distance
+				*out++ = '$';
+				in += 2;
+				++mapping_desc.left_clipping;
+				--mapping_desc.err_edit_distance;
+			}
+			else if (*in == '^') {
+				// deletion - omit position, move in reference, decrese edit distance
+				in += 2;
+				++mapping_desc.ref_seq_pos;
+				--mapping_desc.ref_length;
+				--mapping_desc.err_edit_distance;
+			}
+			else if (isalpha(*in)) {
+				// mismatch - clip position, move in read and reference, decrese edit distance
+				*out++ = '$';
+				++in;
+				++mapping_desc.left_clipping;
+				++mapping_desc.ref_seq_pos;
+				--mapping_desc.ref_length;
+				--mapping_desc.err_edit_distance;
+			}
+		}
+
+		// rewrite remaining part of the sequenece
+		while (*in) {
+			*out++ = *in++;
+		}
+
 		*out = 0;
 	}
 
-	// right clipping
-	if (maxi.second + rightPenalty > cur) {
-
-		in = mapping.ext_cigar + std::strlen(reinterpret_cast<char*>(mapping.ext_cigar)) - mapping.right_clipping - 1;
-		out = in + 1;
-
-	
-		for (int i = 0; i < mapping.read_length - maxi.first; ++i) {
-			if (*in == '.') {
-				// match - clip position, move in read and reference
-				*(--out) = '$';
-				--in;
-				++mapping.right_clipping;
-				--mapping.ref_length;
-			}
-			else if (isalpha(*in)) {
-				if (*(in - 1) == '#') {
-					// insertion - clip position, move in read, decrese edit distance
-					*(--out) = '$';
-					in -= 2;
-					++mapping.right_clipping;
-					--mapping.err_edit_distance;
-				}
-				else if (*(in - 1) == '^') {
-					// deletion - omit position, move in reference, decrese edit distance
-					in -= 2;
-					--mapping.ref_length;
-					--mapping.err_edit_distance;
-				}
-				else {
-
-					// mismatch - clip position, move in read and reference, decrese edit distance
-					*(--out) = '$';
-					--in;
-					++mapping.right_clipping;
-					--mapping.ref_length;
-					--mapping.err_edit_distance;
-				}
-			}
-		}
-
-		++in;  // in is on the left
-		while (*in) {
-			*in++ = *out++;
-		}
-		*in = 0;
-	}
+	mapping_desc.score = max(0.0, maxi.second) - min(0.0, mini.second) + no_clippings * scoring.clipping;
 }
 
 // ************************************************************************************
@@ -738,7 +1007,7 @@ void CSoftClipping::clipOverlappingPairs(mapping_pair_t& p, const scoring_t& sco
 		right = p.second;
 	}
 	else if (p.first->ref_seq_pos == p.second->ref_seq_pos) {
-		if (p.first->dir == genome_t::direct) { // if positions are equal - treat direc as left
+		if (p.first->mapping.direction == genome_t::direct) { // if positions are equal - treat direc as left
 			left = p.first;
 			right = p.second;
 		}
@@ -753,10 +1022,10 @@ void CSoftClipping::clipOverlappingPairs(mapping_pair_t& p, const scoring_t& sco
 	}
 
 	// if reveresed read is on the left and overlaps with forward read
-	if (left->dir == genome_t::rev_comp && left->ref_seq_pos + left->ref_length > right->ref_seq_pos) {
+	if (left->mapping.direction == genome_t::rev_comp && left->ref_seq_pos + left->ref_length > right->ref_seq_pos) {
 		for (int r = 0; r < 2; ++r) {
 			auto& mapping = p[r];
-			if (mapping.method == MatchingMethod::Perfect || mapping.method == MatchingMethod::PerfectDistant) {
+			if (mapping.method == MatchingMethod::Enumeration::Perfect || mapping.method == MatchingMethod::Enumeration::PerfectDistant) {
 				mp_ext_cigar.Reserve(mapping.ext_cigar);
 				std::fill(mapping.ext_cigar, mapping.ext_cigar + mapping.read_length, '.');
 				mapping.ext_cigar[mapping.read_length] = 0;

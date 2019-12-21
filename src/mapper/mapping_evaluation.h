@@ -34,7 +34,7 @@ struct Evaluator<mapping_desc_t>
 
 	double operator()(const mapping_desc_t& p) const {
 		return 
-			static_cast<float>(p.read_length - p.left_clipping - p.right_clipping - p.err_edit_distance) * model.getScoring().match +
+			static_cast<float>((int64_t) p.read_length - p.left_clipping - p.right_clipping - p.err_edit_distance) * model.getScoring().match +
 			static_cast<float>(p.err_edit_distance) *  model.getScoring().error;
 	}
 };
@@ -75,20 +75,23 @@ struct MappingEvaluation
 	result_t best[2];
 
 	double mapq_mult;
-
 	double mapq_div;
 
 	MappingEvaluation(double mapq_mult, double mapq_div) : best{ {0,0}, {0,0} }, mapq_mult(mapq_mult), mapq_div(mapq_div) {}
 
 	MappingEvaluation(const MappingEvaluation& a, const MappingEvaluation& b) {
-		if (result_t::compare(a.best[0], b.best[0])) { 
+		mapq_mult = a.mapq_mult;
+		mapq_div = a.mapq_div;
+		if (result_t::compare(a.best[0], b.best[0])) {
 			this->best[0] = a.best[0]; // a[0] > ...
 
 			if (result_t::compare(a.best[1], b.best[0])) {
 				this->best[1] = a.best[1]; // a[0] > a[1] > b[0] > ...
-			} else if (result_t::compare(b.best[0], a.best[1])) {
+			}
+			else if (result_t::compare(b.best[0], a.best[1])) {
 				this->best[1] = b.best[0]; // a[0] > b[0] > a[1] > ...
-			} else {
+			}
+			else {
 				this->best[1] = a.best[1]; // a[0] > a[1] = b[0] > ...
 				this->best[1].count += b.best[0].count;
 			}
@@ -109,7 +112,7 @@ struct MappingEvaluation
 		}
 		else {
 			this->best[0] = a.best[0]; // a[0] = b[0] > ...
-			this->best[0].count = b.best[0].count; 
+			this->best[0].count += b.best[0].count;						
 
 			if (result_t::compare(a.best[1], b.best[1])) {
 				this->best[1] = a.best[1];   // a[0] = b[0] > a[1] > ...
@@ -121,7 +124,7 @@ struct MappingEvaluation
 				this->best[1] = a.best[1]; // a[0] = b[0] > a[1] = b[1]
 				this->best[1].count += b.best[1].count;
 			}
-		}	
+		}
 	}
 
 	// Calculates MAPQ on the basis of scores
@@ -202,7 +205,8 @@ struct MappingEvaluation
 
 		// fixme: hardcoded solution to multiple equally good distant mappings
 		auto& top = collection[0];
-		if (top.calculateInsertSize() > model.mean() + model.getSaturationDev() && (top.first->mapq <= 3 || top.second->mapq <= 3)) {
+//		if (top.calculateInsertSize() > model.mean() + model.getSaturationDev() && (top.first->mapq <= 3 || top.second->mapq <= 3)) {
+		if(top.is_distant && (top.first->mapq <= 3 || top.second->mapq <= 3)) {
 			pairq = std::min(top.first->mapq, top.second->mapq);
 		}
 		

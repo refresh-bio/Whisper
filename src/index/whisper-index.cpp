@@ -19,12 +19,13 @@
 
 #include "ref_seq.h"
 #include "suf_arr.h"
-
+#include "vcf.h"
 
 using namespace std;
 
 string index_name;
 vector<string> ref_seq_names;
+vector<string> vcf_names;
 string dest_dir;
 string temp_dir;
 int stage_no;
@@ -39,8 +40,8 @@ void usage()
 	cerr << "Whisper index construction v. " << MAPPER_VERSION << "\n";
 	cerr << "Usage: \n";
 #ifdef _DEVELOPMENT_MODE
-	cerr << "   whisper-index <index_name> <ref_seq_file_name> <dest_dir> <temp_dir> [stage_no]\n";
-	cerr << "   whisper-index <index_name> <@ref_seq_files_name> <dest_dir> <temp_dir> [stage_no]\n";
+	cerr << "   whisper-index <index_name> <ref_seq_file_name> <dest_dir> <temp_dir> <vcf_name> [stage_no]\n";
+	cerr << "   whisper-index <index_name> <@ref_seq_files_name> <dest_dir> <temp_dir> <@vcf_files_name> [stage_no]\n";
 	cerr << "Stages:\n";
 	cerr << "   0 - all stages (default)\n";
 	cerr << "   1 - ref. seq. construction (direct)\n";
@@ -51,11 +52,14 @@ void usage()
 	cerr << "   6 - suffix array construction (rev. comp.)\n";
 	cerr << "   7 - LUT for suffix array construction (direct)\n";
 	cerr << "   8 - LUT for suffix array construction (rev. comp.)\n";
-	cerr << "   9 - removing all temporary files\n";
+	cerr << "   9 - SNP and short indel construction from VCF file\n";
+	cerr << "   99 - removing all temporary files\n";
 #else
 	cerr << "   whisper-index <index_name> <ref_seq_file_name> <dest_dir> <temp_dir>\n";
 	cerr << "   whisper-index <index_name> <@ref_seq_files_name> <dest_dir> <temp_dir>\n";
 #endif
+	cerr << "Hints:\n";
+	cerr << "   * vcf_name can be . if not used\n";
 
 	exit(0);
 }
@@ -66,6 +70,7 @@ bool parse_params(int argc, char **argv)
 	index_name = string(argv[1]);
 	dest_dir   = NormalizeDirectory(string(argv[3]));
 	temp_dir   = NormalizeDirectory(string(argv[4]));
+//	dbsnp_name = string(argv[5]);
 
 	if(argv[2][0] != '@')
 		ref_seq_names.push_back(string(argv[2]));
@@ -85,14 +90,31 @@ bool parse_params(int argc, char **argv)
 		inf.close();
 	}
 
+	if (argv[5][0] != '@')
+		vcf_names.push_back(string(argv[5]));
+	else
+	{
+		ifstream inf(argv[5] + 1);
+		if (!inf.good())
+		{
+			cerr << "Cannot open file : " << string(argv[5] + 1) << "\n";
+			return false;
+		}
+
+		string s;
+		while (getline(inf, s))
+			if (s != "")
+				vcf_names.push_back(s);
+		inf.close();
+	}
+
 #ifdef _DEVELOPMENT_MODE
-	if(argc == 6)
-		stage_no = atoi(argv[5]);
+	if(argc == 7)
+		stage_no = atoi(argv[6]);
 	else
 #endif
 		stage_no = 0;
-
-	
+		
 	return !ref_seq_names.empty();
 }
 
@@ -158,8 +180,15 @@ int main(int argc, char **argv)
 		if(!lut_compute_rc(index_name, dest_dir, temp_dir))
 			return 0;
 
+	// SNP and short variants construction
+#ifdef ENABLE_VCF_VARIANTS
+	if (stage_no == 0 || stage_no == 9)
+		if (!vcf_construct(index_name, dest_dir, vcf_names))
+			return 0;
+#endif
+
 	// Remove temporary files
-	if(stage_no == 0 || stage_no == 9)
+	if(stage_no == 0 || stage_no == 99)
 		if(!remove_temps(index_name, temp_dir))
 			return 0;
 			

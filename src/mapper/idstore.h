@@ -13,7 +13,7 @@
 #ifndef _IDSTORE_H
 #define _IDSTORE_H
 
-#include "defs.h"
+#include "../common/defs.h"
 #include <string>
 #include <map>
 #include <utility>

@@ -10,7 +10,7 @@
 // *******************************************************************************************
 
 
-#include "../common/stats.h"
+#include "stats.h"
 #include <algorithm>
 #include <numeric>
 

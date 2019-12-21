@@ -14,13 +14,13 @@
 #define _REF_DESC_H
 
 #include "../common/defs.h"
-#include "../common/idstore.h"
-#include "../common/queue.h"
-#include "../common/mmgr.h"
-#include "../common/stats.h"
+#include "idstore.h"
+#include "queue.h"
+#include "mmgr.h"
+#include "stats.h"
 #include "../common/types.h"
-#include "../common/params.h"
-#include "../common/joiner_mgr.h"
+#include "params.h"
+#include "joiner_mgr.h"
 
 #include <vector>
 
@@ -38,7 +38,8 @@ public:
 
 	bool Load(string _file_name);
 
-	bool Translate(uint32_t raw_pos, string &seq_name, int32_t &pos, int32_t& id, const uchar_t* msg);
+	bool Translate(uint32_t raw_pos, string& seq_name, int32_t& pos, int32_t& id, const uchar_t* msg);
+	bool RevTranslate(uint32_t &raw_pos, int32_t pos, int32_t id);
 	bool GetDescription(vector<seq_desc_t> &_seq_desc);
 	vector<seq_desc_t>& GetDescription() { return seq_desc;  }
 

@@ -15,12 +15,12 @@
 
 #include "../common/defs.h"
 #include "../common/utils.h"
-#include "../common/mmgr.h"
-#include "../common/queue.h"
-#include "../common/fastq_reader.h"
-#include "../common/stats.h"
+#include "mmgr.h"
+#include "queue.h"
+#include "fastq_reader.h"
+#include "stats.h"
 #include "../common/timer.h"
-#include "../common/params.h"
+#include "params.h"
 
 // ************************************************************************************
 //
@@ -85,7 +85,7 @@ class CReadsDeliverer
 	uchar_t **sorted_ptrs;
 	uchar_t *buf_data_sft;
 
-	void sort_reads();
+	void sort_reads(bool fake_sort);
 	void decompress_reads();
 	void prepare_lut();
 
@@ -96,7 +96,7 @@ public:
 
 	bool SetBin(reads_bin_t &_bin);
 	uint64_t GetNoReads();
-	bool Start();
+	bool Start(bool fake_sort);
 	bool Pop(read_id_t &id, uchar_t* &data, uchar_t* &data_sft, uint32_t &size, uint32_t &best_error);
 };
 

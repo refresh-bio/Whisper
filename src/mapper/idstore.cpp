@@ -132,7 +132,7 @@ read_id_t CIDStore::GetBlockID(uint32_t file_no, string file_name, uint32_t file
 	read_id_t id;
 	read_id_t sub_block_mask = (((read_id_t) 1) << sub_block_bits) - 1;
 
-	auto p = mappings.find(make_pair(file_no, file_part & ~sub_block_mask));
+	auto p = mappings.find(make_pair(file_no, (uint32_t) (file_part & ~sub_block_mask)));
 	if(p == mappings.end())
 		return ~((read_id_t) 0);
 

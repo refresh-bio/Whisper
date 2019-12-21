@@ -12,7 +12,6 @@
 
 #pragma once
 #include "LevMyers.h"
-
 #include "immintrin.h"
 
 // ************************************************************************************
@@ -62,7 +61,5 @@ public:
 protected:
 	virtual void reallocBuffers(uint32_t _max_query_len, uint32_t _max_text_len, int rounding);
 };
-
-
 
 // EOF

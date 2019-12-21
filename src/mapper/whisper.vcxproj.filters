@@ -1,0 +1,296 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="bins.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="edit_dist.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="fastq_reader.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="idstore.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\libs\instrset_detect.cpp">
+      <Filter>Lib source files</Filter>
+    </ClCompile>
+    <ClCompile Include="joiner_mgr.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="LevMyers64.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="LevMyers128_AVX.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="LevMyers128_AVX2.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="LevMyers128_SSE.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="mapper.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="mapping_core.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="mapping_core_diff_len_reads.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="mapping_core_dp.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="mapping_core_sa.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="mapping_core_str_comp.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="mapping_core_substrings.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="params.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="queue.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="reads.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="ref_desc.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\reference.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="results.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="sa.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="sam.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="sam_matching.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="sam_part.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="sam_variant.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="sam_writer.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="simd_utils.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="simd_utils_64.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="simd_utils_128_AVX.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="simd_utils_128_AVX2.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="simd_utils_128_SSE.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="simd_utils_256.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="soft_clipping.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="stats.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\timer.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\utils.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\variant.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="variant_match.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="whisper.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="LevMyers256_AVX.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="LevMyers256_AVX2.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="indels.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="bins.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libs\bzlib.h">
+      <Filter>Lib header files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\defs.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="edit_dist.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="fastq_reader.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="idstore.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="joiner_mgr.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libs\asmlib.h">
+      <Filter>Lib header files</Filter>
+    </ClInclude>
+    <ClInclude Include="LevMyers.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="LevMyers128.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="LevMyers256.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libs\libdeflate.h">
+      <Filter>Lib header files</Filter>
+    </ClInclude>
+    <ClInclude Include="mapper.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="mapping_core.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="mapping_evaluation.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="mapping_core_luts.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="mmgr.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="params.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="probabilistic.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="queue.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="ref_desc.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="reads.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\reference.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="results.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="sa.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="sam.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="sam_part.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="sam_writer.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="simd_utils.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="soft_clipping.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="stats.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\timer.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\types.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\utils.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\variant.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="variant_match.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\libs\zlib.h">
+      <Filter>Lib header files</Filter>
+    </ClInclude>
+    <ClInclude Include="LevMyers128.hpp">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="LevMyers256.hpp">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="indels.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="vector_utils.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="..\libs\libacof64.lib">
+      <Filter>Libs</Filter>
+    </Library>
+    <Library Include="..\libs\libbzip2.lib">
+      <Filter>Libs</Filter>
+    </Library>
+    <Library Include="..\libs\libdeflate.lib">
+      <Filter>Libs</Filter>
+    </Library>
+    <Library Include="..\libs\zlibstat.lib">
+      <Filter>Libs</Filter>
+    </Library>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header files">
+      <UniqueIdentifier>{8e890ea0-9a2b-4e9b-8e52-4e80baccee57}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source files">
+      <UniqueIdentifier>{418d9697-7db5-4310-b7bb-10760ec374db}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Lib header files">
+      <UniqueIdentifier>{8fac6234-b515-46b7-931c-33fe4f2841cb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Lib source files">
+      <UniqueIdentifier>{6d37d1f5-e011-4ae2-a58c-e8771e9c8a62}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Libs">
+      <UniqueIdentifier>{408a57a2-34cd-46c4-b21a-e5ac5f96d41f}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
