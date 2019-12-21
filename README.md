@@ -132,8 +132,9 @@ readsC_3;readsC_2
 
 ## Citing
 
-[Deorowicz, S., Debudaj-Grabysz, A., Gudyś, A., Grabowski, S. (2018) Whisper: Read sorting allows robust mapping of sequencing data, Bioinformatics, bty927](https://academic.oup.com/bioinformatics/advance-article-abstract/doi/10.1093/bioinformatics/bty927/5165374?redirectedFrom=fulltext)
+[Deorowicz, S., Debudaj-Grabysz, A., Gudyś, A., Grabowski, S. (2018) Whisper: Read sorting allows robust mapping of sequencing data, Bioinformatics, 35(12):2043–2050](https://academic.oup.com/bioinformatics/advance-article-abstract/doi/10.1093/bioinformatics/bty927/5165374?redirectedFrom=fulltext)
 
 
+[Deorowicz, S., Gudyś, A. (2019) Whisper 2: indel-sensitive short read mapping, biorXiv,https://doi.org/10.1101/2019.12.18.881292](https://doi.org/10.1101/2019.12.18.881292) 
 
  
