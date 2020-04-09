@@ -106,7 +106,7 @@ Options:
   
 Examples:
 
-* `whisper -out result.sam -t 12 hg38 reads_1.fq reads_2.fq`
+* `whisper -out result.sam -rp -t 12 hg38 reads_1.fq reads_2.fq`
 
 Maps paired-end reads from `reads_1.fq` and `reads_2.fq` FASTQ files using `hg38` index. Computations are distributed over 12 threads,  results are stored in `result.sam` file.
 
