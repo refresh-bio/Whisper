@@ -110,10 +110,9 @@ Examples:
 
 Maps paired-end reads from `reads_1.fq` and `reads_2.fq` FASTQ files using `hg38` index. Computations are distributed over 12 threads,  results are stored in `result.sam` file.
 
-* `whisper hg38 @reads.list`
+* `whisper hg38 @reads_se.list`
 
-Maps reads from FASTQ files listed in `reads.list` file using `hg38` index. File `reads.list` may contain either single-end reads:
-
+Maps single-end reads from FASTQ files listed in `reads_se.list` file using `hg38` index. The example contents of `reads_se.list` file:
 ```
 readsA
 readsB
@@ -121,11 +120,13 @@ readsC
 ...
 ```
 
-or paired-end reads:
+* `whisper -rp hg38 @reads_pe.list`
+
+Maps paired-end reads from FASTQ files listed in `reads_pe.list` file using `hg38` index. The example contents of `reads_pe.list` file:
 ```
 readsA_1;readsA_2
-readsB_2;readsB_2
-readsC_3;readsC_2
+readsB_1;readsB_2
+readsC_1;readsC_2
 ...
 ```
 
