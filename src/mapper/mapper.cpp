@@ -615,25 +615,6 @@ bool CMapper::adjust_bins()
 // Adjust splitting of reads for the stages
 bool CMapper::adjust_stage_segments()
 {
-	if (params.max_no_errors == 0)
-	{
-		// Adjust max. no of errors according to read lengths
-		if (params.max_read_len < 100)
-			params.max_no_errors = 3;
-		else if (params.max_read_len < 127)
-			params.max_no_errors = 4;
-		else if (params.max_read_len < 153)
-			params.max_no_errors = 5;
-		else if (params.max_read_len < 203)
-			params.max_no_errors = 6;
-		else if (params.max_read_len < 253)
-			params.max_no_errors = 7;
-		else
-			params.max_no_errors = 8;
-
-		params.max_approx_indel_mismatches = (uint32_t)(params.max_no_errors * params.sensitivity_factor);
-	}
-
 	uint32_t max_errors = params.max_no_errors;
 
 	params.stage_segments.clear();
@@ -719,6 +700,25 @@ bool CMapper::adjust_max_and_min_read_len(vector<uint64_t> &hist_read_len)
 	{
 		// Allow min read len to be 10% smaller than max read len
 		params.min_read_len = MAX(min_len, (int)(max_len * 0.9));
+	}
+
+	if (params.max_no_errors == 0)
+	{
+		// Adjust max. no of errors according to read lengths
+		if (params.max_read_len < 100)
+			params.max_no_errors = 3;
+		else if (params.max_read_len < 127)
+			params.max_no_errors = 4;
+		else if (params.max_read_len < 153)
+			params.max_no_errors = 5;
+		else if (params.max_read_len < 203)
+			params.max_no_errors = 6;
+		else if (params.max_read_len < 253)
+			params.max_no_errors = 7;
+		else
+			params.max_no_errors = 8;
+
+		params.max_approx_indel_mismatches = (uint32_t)(params.max_no_errors * params.sensitivity_factor);
 	}
 
 	double max_frac_errors = (double)params.max_no_errors / params.min_read_len;

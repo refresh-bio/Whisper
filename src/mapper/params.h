@@ -124,8 +124,6 @@ struct CCmdParams
 		max_mate_distance = 1000;
 		max_mate_edit_distance_frac = 0.09f;
 
-		//	max_no_mappings		= 32;		// Maximal no. of stored mappings
-		//	mapping_counter_size = 1;
 		max_no_mappings = 1 << 10;		// Maximal no. of stored mappings
 		mapping_counter_size = 4;
 		paired_reads = false;	// single-end reads

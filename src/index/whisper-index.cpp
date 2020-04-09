@@ -58,8 +58,10 @@ void usage()
 	cerr << "   whisper-index <index_name> <ref_seq_file_name> <dest_dir> <temp_dir>\n";
 	cerr << "   whisper-index <index_name> <@ref_seq_files_name> <dest_dir> <temp_dir>\n";
 #endif
+#ifdef ENABLE_VCF_VARIANTS
 	cerr << "Hints:\n";
 	cerr << "   * vcf_name can be . if not used\n";
+#endif
 
 	exit(0);
 }
@@ -90,6 +92,7 @@ bool parse_params(int argc, char **argv)
 		inf.close();
 	}
 
+#ifdef ENABLE_VCF_VARIANTS
 	if (argv[5][0] != '@')
 		vcf_names.push_back(string(argv[5]));
 	else
@@ -107,6 +110,7 @@ bool parse_params(int argc, char **argv)
 				vcf_names.push_back(s);
 		inf.close();
 	}
+#endif
 
 #ifdef _DEVELOPMENT_MODE
 	if(argc == 7)
