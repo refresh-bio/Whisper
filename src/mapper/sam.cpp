@@ -293,9 +293,9 @@ void CSamGenerator::operator()()
 	stat_refined_short_indels_lev = 0;
 	stat_refined_short_indels_mapping = 0;
 
-	uint32_t thread_id = (uint32_t) hash<thread::id>()(this_thread::get_id());
-
 #ifdef LOG_UNMAPPED
+	uint32_t thread_id = (uint32_t)hash<thread::id>()(this_thread::get_id());
+
 	for (int i = 0; i < 2; ++i)
 	{
 		string fn = string("unmapped_") + to_string(thread_id) + "_" + to_string(i + 1) + ".fastq";
