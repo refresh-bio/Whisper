@@ -1,5 +1,8 @@
 # Whisper2
 
+[![GitHub downloads](https://img.shields.io/github/downloads/refresh-bio/whisper/total.svg?style=flag&label=GitHub%20downloads)](https://github.com/refresh-bio/Whisper/releases)
+[![Bioconda downloads](https://img.shields.io/conda/dn/bioconda/whisper.svg?style=flag&label=Bioconda%20downloads)](https://anaconda.org/bioconda/whisper)
+
 ## Installation and configuration
 
 Whisper comes with a set of precompiled binaries for Windows and Linux. They can be found under *Releases* tab.
