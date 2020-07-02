@@ -41,7 +41,7 @@ void usage()
 	cerr << "   whisper [options] <index_name> file_se \n";
 	cerr << "   whisper [options] <index_name> file_pe1 file_pe2\n";
 	cerr << "Parameters:\n";
-	cerr << "  index_name   - name of the index (as created by asm_pp)\n";
+	cerr << "  index_name   - name of the index (as created by whisper-index)\n";
 	cerr << "  files        - name of the file containing list of FASTQ files with seq. reads\n";
 	cerr << "  file_se      - FASTQ file (single-end)\n";
 	cerr << "  file_pe[1|2] - FASTQ files (paired-end)\n";
@@ -70,7 +70,7 @@ void usage()
 	cerr << "  -gap-del-extend <value> - score for gap (del) extend (default: " << cmd_params.gap_del_extend << ")\n";
 	cerr << "  -gap-ins-open <value> - score for gap (ins) open (default: " << cmd_params.gap_ins_open << ")\n";
 	cerr << "  -gap-ins-extend <value> - score for gap (ins) extend (default: " << cmd_params.gap_ins_extend << ")\n";
-	cerr << "  -gzipped-SAM-level <value> - gzip compression level of SAM/BAM, 0 - no compression (default: " << cmd_params.gzipped_SAM_level << ")\n";
+	cerr << "  -gzipped-SAM <value> - gzip compression level of SAM/BAM, 0 - no compression (default: " << cmd_params.gzipped_SAM_level << ")\n";
 	cerr << "  -high-confidence-sigmas <value> - (default: " << cmd_params.high_confidence_sigmas << ")\n";
 	cerr << "  -hit-merging-threshold <value> - minimal distance between different mappings (default: " << cmd_params.hit_merging_threshold << ")\n";
 	cerr << "  -hit-merging-wrt-first <value> - calculate distance in marged group w.r.t. first (default: " << cmd_params.hit_merging_wrt_first << ")\n";
@@ -85,7 +85,7 @@ void usage()
 	cerr << "  -min-clipped-factor <value> - mask bases of quality lower than value (default: " << cmd_params.min_clipped_factor << ")\n";
 	cerr << "  -out <name> - name of the output file (default: " << cmd_params.project_name << ")\n";
 	cerr << "  -penalty-saturation <value> - no. of sigmas for max. penalty in matching pairs (default: " << cmd_params.penalty_saturation_sigmas << ")\n";
-	cerr << "  -rg <read_group> - complete read group header line, ’\t’ character will be converted to a TAB in the output SAM while the read group ID will be attached to every read (example line: ’@RG\tID:foo\tSM:bar’)\n";
+	cerr << "  -rg <read_group> - complete read group header line, '\\t' character will be converted to a TAB in the output SAM while the read group ID will be attached to every read (example line: '@RG\\tID:foo\\tSM:bar')\n";
 	cerr << "  -r[s|p] - single or paired-end reads (default: " << (cmd_params.paired_reads ? "paired" : "single") << ")\n";
 	cerr << "  -score-discretization-threshold (default: " << cmd_params.score_discretization_threshold << ")\n";
 	cerr << "  -score-clipping <value> score for clipping (default: " << cmd_params.clipping_score << ")\n";
@@ -117,10 +117,11 @@ void usage()
 	cerr << "  -sr <major1>:<minor1>-<major2>:<minor2> - perform only stages from <major1>:<minor1> to <major2>:<minor2>\n";
 	cerr << "  -v <value> - verbosity level (default: " << cmd_params.verbosity_level << ")\n";
 #endif
-	cerr << "Examples:\n";
-	cerr << "  whisper human @files\n";
-	cerr << "  whisper -temp temp/ human reads1.fq reads2.fq\n";
-	cerr << "  whisper -out result.sam -temp temp/ -t 12 human reads1.fq reads2.fq\n";
+	cerr << "Example\n"
+		<< "Map paired-end reads from reads_1.fq and reads_2.fq FASTQ files using hg38 index.\n"
+		<< "Distribute computations over 12 threads, store results in result.sam file:\n"
+		<< "  whisper -out result.sam -rp -t 12 hg38 reads_1.fq reads_2.fq\n";
+
 }
 
 // ************************************************************************************
@@ -132,7 +133,7 @@ bool parse_parameters(int argc, char **argv)
 //	uint64_t tmp;
 #endif
 
-	if(argc < 6)
+	if(argc < 3)
 		return false;
 
 #ifndef _DEVELOPMENT_MODE

@@ -81,7 +81,7 @@ Options:
  * `-gap-del-extend <value>` - score for gap (del) extend (default: -0.4)
  * `-gap-ins-open <value>` - score for gap (ins) open (default: -5)
  * `-gap-ins-extend <value>` - score for gap (ins) extend (default: -0.4)
- * `-gzipped-SAM-level <value>` - gzip compression level of SAM/BAM, 0 - no compression (default: 0)
+ * `-gzipped-SAM <value>` - gzip compression level of SAM/BAM, 0 - no compression (default: 0)
  * `-high-confidence-sigmas <value>` - (default: 4)
  * `-hit-merging-threshold <value>` - minimal distance between different mappings (default: 12)
  * `-hit-merging-wrt-first <value>` - calculate distance in marged group w.r.t. first (default: 1)

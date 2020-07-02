@@ -34,7 +34,7 @@
 #include <string>
 using namespace std;
 
-#define MAPPER_VERSION		"2.0 (2019-12-15)"
+#define MAPPER_VERSION		"2.0.1 (2020-07-02)"
 #define MAPPER_ID			"Whisper"
 #define MAPPER_NAME			"Whisper"
 
