@@ -22,11 +22,35 @@ E.g., if sample reads in uncompressed FASTQ format have 100GB and the processing
 
 ## Usage
 
-The preliminary step of the analysis, performed only once for a given reference genome, is construction of an index. The index may be then used for mapping reads from different samples to the reference. 
+### Quick start
+
+```bash
+# download and unpack E.coli str. K-12 substr. MG1655 reference genome
+wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/904/425/475/GCF_904425475.1_MG1655/GCF_904425475.1_MG1655_genomic.fna.gz
+gzip -k -d GCF_904425475.1_MG1655_genomic.fna.gz 
+
+# download NovaSeq 6000 reads from E.coli MG1655 IR-10-94 population sequencing
+wget ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR100/030/SRR10051130/SRR10051130_1.fastq.gz
+wget ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR100/030/SRR10051130/SRR10051130_2.fastq.gz
+
+# clone and build Whisper
+git clone https://github.com/refresh-bio/Whisper
+make -C Whisper/src
+
+# build an index named ecoli for the reference genome
+mkdir index
+mkdir temp
+./Whisper/src/whisper-index ecoli GCF_904425475.1_MG1655_genomic.fna ./index ./temp
+
+# map reads to the reference genome and store the results in mappings.sam
+./Whisper/src/whisper -rp -out mappings ./index/ecoli  SRR10051130_1.fastq.gz SRR10051130_1.fastq.gz
+```
+
+Note, that Whisper was optimized for processing data from sequencing large samples with high coverage (e.g. human). 
 
 ### Indexing reference genome
 
-Indexing can be executed in two wariants, depending on the representation of the reference (single versus multiple FASTA files):
+The preliminary step of the analysis, performed only once for a given reference genome, is construction of an index. The index may be then used for mapping reads from different samples to the reference. Indexing can be executed in two wariants, depending on the representation of the reference (single versus multiple FASTA files):
 
 `whisper-index <index_name> <ref_seq_file_name> <dest_dir> <temp_dir>`
 
