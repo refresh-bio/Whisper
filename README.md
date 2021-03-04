@@ -2,27 +2,7 @@
 
 [![GitHub downloads](https://img.shields.io/github/downloads/refresh-bio/whisper/total.svg?style=flag&label=GitHub%20downloads)](https://github.com/refresh-bio/Whisper/releases)
 
-## Installation and configuration
-
-Whisper comes with a set of precompiled binaries for Windows and Linux. They can be found under *Releases* tab.
-
-The software can be also built from the sources distributed as:
-* Visual Studio 2017 solution for Windows,
-* MAKE project (G++ 7.2 required) for Linux.
-
-NOTE
-
-Linux systems limit number of files that can be opened by the process. Make sure this limit is sufficient for Whisper, which requires:
-
-`num_files = num_bins (384 by default) + num_threads + 2 * total_size_of_FASTQ_in_GB` 
-
-E.g., if sample reads in uncompressed FASTQ format have 100GB and the processing is done by 16 CPU threads, Whisper opens 600 files. To change the limit use `ulimit` Linux command:
-
-`ulimit -n 600`
-
-## Usage
-
-### Quick start
+## Quick start
 
 ```bash
 # download and unpack E.coli str. K-12 substr. MG1655 reference genome
@@ -48,9 +28,31 @@ mkdir temp
 
 Note, that Whisper was optimized for processing data from sequencing large samples with high coverage (e.g. human). 
 
+## Installation and configuration
+
+Whisper comes with a set of precompiled binaries for Windows and Linux. They can be found under *Releases* tab.
+
+The software can be also built from the sources distributed as:
+* Visual Studio 2017 solution for Windows,
+* MAKE project (G++ 7.2 required) for Linux.
+
+NOTE
+
+Linux systems limit number of files that can be opened by the process. Make sure this limit is sufficient for Whisper, which requires:
+
+`num_files = num_bins (384 by default) + num_threads + 2 * total_size_of_FASTQ_in_GB` 
+
+E.g., if sample reads in uncompressed FASTQ format have 100GB and the processing is done by 16 CPU threads, Whisper opens 600 files. To change the limit use `ulimit` Linux command:
+
+`ulimit -n 600`
+
+## Usage
+
+The preliminary step of the analysis, performed only once for a given reference genome, is construction of an index. The index may be then used for mapping reads from different samples to the reference. 
+
 ### Indexing reference genome
 
-The preliminary step of the analysis, performed only once for a given reference genome, is construction of an index. The index may be then used for mapping reads from different samples to the reference. Indexing can be executed in two wariants, depending on the representation of the reference (single versus multiple FASTA files):
+Indexing can be executed in two wariants, depending on the representation of the reference (single versus multiple FASTA files):
 
 `whisper-index <index_name> <ref_seq_file_name> <dest_dir> <temp_dir>`
 
