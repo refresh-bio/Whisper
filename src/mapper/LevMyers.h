@@ -13,14 +13,10 @@
 #ifndef _LevMyers_
 #define _LevMyers_
 
-#define MAX_VECTOR_SIZE 256
 #include "../common/defs.h"
 #include "../common/utils.h"
 #include "simd_utils.h"
-#pragma warning (disable: 26495 26451 6385)
 #include "../mapper/vector_utils.h"
-#include "../libs/vectorclass.h"
-#pragma warning (default: 26495 26451 6385)
 #include <algorithm>
 
 class scoring_t;

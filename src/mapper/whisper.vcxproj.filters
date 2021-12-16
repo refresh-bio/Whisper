@@ -103,7 +103,7 @@
     <ClCompile Include="simd_utils_128_SSE.cpp">
       <Filter>Source files</Filter>
     </ClCompile>
-    <ClCompile Include="simd_utils_256.cpp">
+    <ClCompile Include="simd_utils_256_AVX.cpp">
       <Filter>Source files</Filter>
     </ClCompile>
     <ClCompile Include="soft_clipping.cpp">
@@ -134,6 +134,12 @@
       <Filter>Source files</Filter>
     </ClCompile>
     <ClCompile Include="indels.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="simd_utils_256_AVX2.cpp">
+      <Filter>Source files</Filter>
+    </ClCompile>
+    <ClCompile Include="simd_utils_256_SSE.cpp">
       <Filter>Source files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -259,6 +265,12 @@
       <Filter>Header files</Filter>
     </ClInclude>
     <ClInclude Include="vector_utils.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="simd_utils_128.hpp">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="simd_utils_256.hpp">
       <Filter>Header files</Filter>
     </ClInclude>
   </ItemGroup>

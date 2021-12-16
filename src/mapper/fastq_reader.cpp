@@ -229,7 +229,7 @@ CFastqReader::CFastqReader(bool _is_fasta, uint32_t _part_size, CObjects *_objec
 		ptr_CountEOLs = CountEOLs128<instruction_set_t::avx>;
 		break;
 	case instruction_set_t::avx2:
-		ptr_CountEOLs = CountEOLs256;
+		ptr_CountEOLs = CountEOLs256<instruction_set_t::avx2>;
 		break;
 	}
 }

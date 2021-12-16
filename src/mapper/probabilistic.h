@@ -106,10 +106,10 @@ public:
 		double highConfidenceSigmas, double clippingDistanceSigmas, double penaltySaturationSigmas,
 		scoring_t scoring)
 		: scoring(scoring),
+		samplesCount(0),
 		minSamplesCount(minSamplesCount),
 		maxSamplesCount(maxSamplesCount),
 		maxPenalty(0),
-		samplesCount(0), 
 		clippingDistanceSigmas(clippingDistanceSigmas),
 		penaltySaturationSigmas(penaltySaturationSigmas),
 		highConfidenceSigmas(highConfidenceSigmas),

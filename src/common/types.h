@@ -419,6 +419,8 @@ struct mapping_desc_t
 			err_edit_distance = mapping.no_mismatches + 1;
 			num_events = mapping.no_mismatches + 1;
 			break;
+		case mapping_type_t::none:
+			break;
 		}
 	};
 

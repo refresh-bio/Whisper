@@ -11,9 +11,7 @@
 
 
 #include "LevMyers128.h"
-#pragma warning (disable: 26495 26451 6385)
 #include "vector_utils.h"
-#pragma warning (default: 26495 26451 6385)
 #include "../common/types.h"
 
 #include <iostream>
@@ -93,8 +91,8 @@ bool LevMyers128<instruction_set>::dynamicProgramming(
 	uint32_t min_ed_pos = 0;
 	uint32_t curr_ed = seq_len;// - bp128_n_words + 1;
 
-	int middle_point_in_ref = (max_distance_in_ref + seq_len) / 2;
-	int best_dist_from_middle = max_distance_in_ref + seq_len;		// large value
+	//int middle_point_in_ref = (max_distance_in_ref + seq_len) / 2;
+	//int best_dist_from_middle = max_distance_in_ref + seq_len;		// large value
 
 	if (max_distance_in_ref == 0) {
 		max_distance_in_ref = max_text_len;
@@ -112,7 +110,7 @@ bool LevMyers128<instruction_set>::dynamicProgramming(
 	// Genome prefetch
 	uchar_t * __restrict ptr = genome_prefetch;
 	uchar_t *genome_ptr = ref_ptr + (ref_pos >> 1);
-	uint32_t text_len_div2 = (max_distance_in_ref + 3) / 2;
+	//uint32_t text_len_div2 = (max_distance_in_ref + 3) / 2;
 
 	*ptr++ = 7;			// No symbol
 	PrefetchDecompressed128<instruction_set>(ptr, genome_ptr, max_distance_in_ref + 3, ref_pos & 1);
@@ -180,7 +178,7 @@ bool LevMyers128<instruction_set>::dynamicProgramming(
 			{
 				min_ed = curr_ed;
 				min_ed_pos = j - word_num;
-				best_dist_from_middle = abs((int) j - middle_point_in_ref);
+				//best_dist_from_middle = abs((int) j - middle_point_in_ref);
 			}
 			else if (curr_ed == min_ed)
 			{

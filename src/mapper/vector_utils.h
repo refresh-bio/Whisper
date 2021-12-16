@@ -8,13 +8,19 @@
 // Date    : see defs.h
 // License : GNU GPL 3
 // *******************************************************************************************
-
-
 #pragma once
+
 #define MAX_VECTOR_SIZE 256
-#pragma warning (disable: 26495 26451 6385)
+
+#ifdef _MSC_VER
+#pragma warning (disable: 26495 26451 6385 4984)
+#endif
+
 #include "../libs/vectorclass.h"
-#pragma warning (default: 26495 26451 6385)
+
+#ifdef _MSC_VER
+#pragma warning (default: 26495 26451 6385 4984)
+#endif
 
 #include <string>
 #include <sstream>

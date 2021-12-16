@@ -101,7 +101,7 @@ bool CSamGenerator::find_duplicate_pairs(const std::vector<mapping_pair_t>& mapp
 	auto tmp = mapping_pairs;
 	std::sort(tmp.begin(), tmp.end(), mapping_pair_t::compareByPositions);
 
-	static int cnt = 0;
+	//static int cnt = 0;
 
 	for (auto a = tmp.begin(); a < std::prev(tmp.end()); ++a) {
 		for (auto b = std::next(a); b != tmp.end(); ++b) {

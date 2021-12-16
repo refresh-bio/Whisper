@@ -1,0 +1,186 @@
+name: Self-hosted CI
+
+on:
+  pull_request:
+    branches: [ master ]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+jobs:
+
+  ecoli-toy:
+    name:  E.coli (toy)
+    runs-on: [self-hosted, whisper]
+    env: 
+      EXE: ./src/whisper
+      EXE_INDEX: ./src/whisper-index
+      REFERENCE: ./example/GCF_904425475.1_MG1655_genomic.fna
+      FASTQ_1: ./example/SRR10051130_10k_1.fastq
+      FASTQ_2: ./example/SRR10051130_10k_2.fastq
+      SAM_PE: ./example/out-pe.sam
+      SAM_SE: ./example/out-se.sam
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: make
+      run: make -j32 -C ./src
+    
+    - name: indexing
+      run: |
+        mkdir temp
+        mkdir index
+        $EXE_INDEX ecoli $REFERENCE ./index ./temp
+           
+    - name: paired-end mapping
+      run: |
+        $EXE -t 1 -rp -out out-pe -temp ./temp ./index/ecoli $FASTQ_1 $FASTQ_2
+        diff $SAM_PE <(tail -n+4 out-pe.sam)
+              
+  #  - name: single-end mapping
+  #    run: |
+  #      $EXE -rs -out out-se ./index/ecoli $FASTQ_1
+  #      cmp $SAM_SE out-se.sam
+  
+  ecoli-full:
+    needs: ecoli-toy
+    name: E.coli (full)
+    runs-on: [self-hosted, whisper]
+    env: 
+      EXE: ./src/whisper
+      FASTQ_1: ../../../../data/ecoli/SRR10051130_1.fastq.gz
+      FASTQ_2: ../../../../data/ecoli/SRR10051130_2.fastq.gz
+      SAM_PE: ../../../../out/ecoli-pe.sam
+      SAM_SE: ../../../../out/ecoli-se.sam
+    
+    steps:
+
+    - name: paired-end mapping
+      run: |
+        $EXE -t 1 -rp -out ecoli-pe -temp ./temp ./index/ecoli $FASTQ_1 $FASTQ_2
+        diff $SAM_PE <(tail -n+4 ecoli-pe.sam)
+           
+  hg001-mapping:
+    needs: ecoli-full
+    name: HG001 mapping
+    runs-on: [self-hosted, whisper]
+    env: 
+      SAMPLE: HG001
+      WHISPER: ./src/whisper
+      WORK_DIR: ../../../..   
+      REF: data/GRCh38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna
+      INDEX: index/GRCh38
+      FASTQ_1: data/HG001/HG001-NA12878-50x_1.fastq.gz
+      FASTQ_2: data/HG001/HG001-NA12878-50x_2.fastq.gz
+      #FASTQ_1: data/HG001/HG001_100k_1.fastq
+      #FASTQ_2: data/HG001/HG001_100k_2.fastq
+      THREADS: 32  
+    
+    steps:
+    - name: Mapping (Whisper)
+      run: |
+        ${WHISPER} -t ${THREADS} -rp -store-BAM -gzipped-SAM 3 -out ${SAMPLE} -temp ./temp/ ${WORK_DIR}/${INDEX} ${WORK_DIR}/${FASTQ_1} ${WORK_DIR}/$FASTQ_2
+
+  hg001-variant-calling:
+    needs: hg001-mapping
+    name: HG001 variant calling
+    runs-on: [self-hosted, whisper]
+    env: 
+      SAMPLE: HG001
+      SAMBAMBA: sambamba
+      STRELKA: ../../../../soft/strelka-build/bin/configureStrelkaGermlineWorkflow.py
+      HAPPY: ../../../../soft/hap.py/bin/hap.py
+      VCF_OUT: ./vcf/HG001/
+      WORK_DIR: ../../../.. 
+      REF: data/GRCh38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna 
+      GIAB_VCF: variants/HG001_GRCh38_1_22_v4.2.1_benchmark.vcf.gz
+      GIAB_BED: variants/HG001_GRCh38_1_22_v4.2.1_benchmark.bed     
+      THREADS: 32  
+    
+    steps:
+    - name: BAM sorting (Sambamba)
+      run: |
+        ${SAMBAMBA} sort -t ${THREADS} -l 3 -m 192GB -o ${SAMPLE}.sorted.bam ${SAMPLE}.bam
+        
+    - name: Variant calling (Strelka)
+      run: |
+        python2 ${STRELKA} --ref ${WORK_DIR}/${REF} --bam ${SAMPLE}.sorted.bam --runDir ${VCF_OUT} --callRegions ${WORK_DIR}/variants/callable.bed.gz
+        python2 "${VCF_OUT}/runWorkflow.py" -m local -j ${THREADS}
+
+    - name: Evaluation (Hap.py)
+      run: |
+        echo "NOW=$(date +'%Y.%m.%d, %H.%M')" >> ${GITHUB_ENV}
+        mkdir "${VCF_OUT}/happy"
+        python2 ${HAPPY} "${WORK_DIR}/${GIAB_VCF}" "${VCF_OUT}/results/variants/variants.vcf.gz" -f "${WORK_DIR}/${GIAB_BED}" -o "${VCF_OUT}/happy/${SAMPLE}" -r ${WORK_DIR}/${REF} --write-vcf
+
+    - name: Storing artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: "${{env.SAMPLE}}.summary.csv"
+        path: "${{env.VCF_OUT}}/happy/${{env.SAMPLE}}.summary.csv"  
+
+    - name: Saving logs
+      run: cp "${VCF_OUT}/happy/${SAMPLE}.summary.csv" "../../../../artifacts/${SAMPLE}/${{env.NOW}}, commit ${GITHUB_SHA}.csv"
+  
+  
+  hg005-mapping:
+    needs: hg001-variant-calling
+    name: HG005 mapping
+    runs-on: [self-hosted, whisper]
+    env: 
+      SAMPLE: HG005
+      WHISPER: ./src/whisper
+      WORK_DIR: ../../../.. 
+      REF: data/GRCh38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna
+      INDEX: index/GRCh38
+      FASTQ_1: data/HG005/reads1.fastq.gz
+      FASTQ_2: data/HG005/reads2.fastq.gz
+      #FASTQ_1: data/HG005/HG005_100k_1.fastq
+      #FASTQ_2: data/HG005/HG005_100k_2.fastq
+      THREADS: 32  
+    
+    steps:
+    - name: Mapping (Whisper)
+      run: |
+        ${WHISPER} -t ${THREADS} -rp -store-BAM -gzipped-SAM 3 -out ${SAMPLE} -temp ./temp/ ${WORK_DIR}/${INDEX} ${WORK_DIR}/${FASTQ_1} ${WORK_DIR}/$FASTQ_2
+    
+  hg005-variant-calling:
+    needs: hg005-mapping
+    name: HG005 variant calling
+    runs-on: [self-hosted, whisper]
+    env: 
+      SAMPLE: HG005
+      SAMBAMBA: sambamba
+      STRELKA: ../../../../soft/strelka-build/bin/configureStrelkaGermlineWorkflow.py
+      HAPPY: ../../../../soft/hap.py/bin/hap.py
+      VCF_OUT: ./vcf/HG005/
+      WORK_DIR: ../../../.. 
+      REF: data/GRCh38/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna
+      GIAB_VCF: variants/HG005_GRCh38_1_22_v4.2.1_benchmark.vcf.gz
+      GIAB_BED: variants/HG005_GRCh38_1_22_v4.2.1_benchmark.bed
+      THREADS: 32  
+    
+    steps:
+    - name: BAM sorting (Sambamba)
+      run: |
+        ${SAMBAMBA} sort -t ${THREADS} -l 3 -m 192GB -o ${SAMPLE}.sorted.bam ${SAMPLE}.bam
+        
+    - name: Variant calling (Strelka)
+      run: |
+        python2 ${STRELKA} --ref ${WORK_DIR}/${REF} --bam ${SAMPLE}.sorted.bam --runDir ${VCF_OUT} --callRegions ${WORK_DIR}/variants/callable.bed.gz
+        python2 "${VCF_OUT}/runWorkflow.py" -m local -j ${THREADS}
+
+    - name: Evaluation (Hap.py)
+      run: |
+        echo "NOW=$(date +'%Y.%m.%d, %H.%M')" >> ${GITHUB_ENV}
+        mkdir "${VCF_OUT}/happy"
+        python2 ${HAPPY} "${WORK_DIR}/${GIAB_VCF}" "${VCF_OUT}/results/variants/variants.vcf.gz" -f "${WORK_DIR}/${GIAB_BED}" -o "${VCF_OUT}/happy/${SAMPLE}" -r ${WORK_DIR}/${REF} --write-vcf
+
+    - name: Storing artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: "${{env.SAMPLE}}.summary.csv"
+        path: "${{env.VCF_OUT}}/happy/${{env.SAMPLE}}.summary.csv"  
+
+    - name: Saving logs
+      run: cp "${VCF_OUT}/happy/${SAMPLE}.summary.csv" "../../../../artifacts/${SAMPLE}/${{env.NOW}}, commit ${GITHUB_SHA}.csv"

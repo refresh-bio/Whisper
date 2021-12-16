@@ -1259,7 +1259,7 @@ void CSamGenerator::store_mapped_read(uchar_t *id, uchar_t *sequence, uchar_t *p
 	data_ptr += (uint64_t) id_bytes + mapping_counter_size;
 
 	uint64_t no_stored_mappings = no_mappings;
-	uint32_t rec_size = sizeof(ref_pos_t) + 1 + 1 + 1;
+	//uint32_t rec_size = sizeof(ref_pos_t) + 1 + 1 + 1;
 
 	string ref_seq_name;
 	int32_t ref_seq_id;
@@ -1284,8 +1284,7 @@ void CSamGenerator::store_mapped_read(uchar_t *id, uchar_t *sequence, uchar_t *p
 			uint32_t check_pos;
 			ref_seq_desc->RevTranslate(check_pos, ref_seq_pos, ref_seq_id);
 
-			if (check_pos != candidate_mapping.pos)
-				int aa = 1;
+			//if (check_pos != candidate_mapping.pos) {}
 
 			if (candidate_mapping.direction == genome_t::rev_comp)
 				ref_seq_pos -= sequence_len - 1;
@@ -1472,9 +1471,11 @@ bool  CSamGenerator::update_model(read_id_t read_id, uchar_t *id[2], uchar_t *se
 		mapping_desc[i].reserve(2 * (mapping_desc[i].size() + mapping_desc[!i].size())); // for each hit we can find 2 new mate hits (myers, clipping) 
 		generate_unique_hits(mapping_desc[i], hits_se[i]);
 
+		/*
 		auto it = find_if(hits_se[i].begin(), hits_se[i].end(), [](const mapping_desc_t* x)->bool {
 			return x->err_edit_distance == 0;
 		});
+		*/
 
 		hits_se[i].reserve(hits_se[i].size() + hits_se[!i].size());
 	}
@@ -1496,7 +1497,8 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 	uint32_t id_len[2], uint32_t sequence_len[2], uint32_t plus_len[2], uint32_t quality_len[2],
 	uchar_t *&data_ptr)
 {
-#pragma region Region: Initialisation
+	// **********************************
+	// Initialisation
 	CThreadWatch thr_watch;
 
 	uchar_t perfect_cigar[2][10] = { { 0 },{ 0 } };
@@ -1524,9 +1526,8 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 #ifdef MEASURE_PP_TIMES
 	thr_watch.StartTimer();
 #endif
-#pragma endregion
 
-#pragma region Region: Loading_mapping_results
+	// **********************************
 	// Load mapping results for both reads
 	for(uint32_t r = 0; r < 2; ++r)
 	{
@@ -1613,9 +1614,9 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 	thr_watch.StopTimer();
 	part_times[0] += thr_watch.GetElapsedTime();
 #endif
-#pragma endregion
 
-#pragma region Region: Generation of unique hits
+	// **********************************
+	// Generation of unique hits
 #ifdef MEASURE_PP_TIMES
 	thr_watch.StartTimer();
 #endif
@@ -1642,9 +1643,9 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 	thr_watch.StopTimer();
 	part_times[1] += thr_watch.GetElapsedTime();
 #endif
-#pragma endregion 
-
-#pragma region Region: Matching mappings obtained in the mapping stages
+ 
+	// **********************************
+#	// Matching mappings obtained in the mapping stages
 	// find pairings
 	std::pair<int, int> entireRange(0, std::numeric_limits<int>::max());
 	std::pair<int, int> lowErrorRange(0, params->max_no_errors);
@@ -1670,9 +1671,9 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 	thr_watch.StopTimer();
 	part_times[2] += thr_watch.GetElapsedTime();
 #endif
-#pragma endregion
 
-#pragma region Region: Looking for matches using external variant database
+	// **********************************
+	// Looking for matches using external variant database
 #ifdef MEASURE_PP_TIMES
 	thr_watch.StartTimer();
 #endif
@@ -1700,9 +1701,9 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 	thr_watch.StopTimer();
 	part_times[3] += thr_watch.GetElapsedTime();
 #endif
-#pragma endregion
 
-#pragma region Region: Looking for matches using paired Myers and/or clipping - low error range
+	// **********************************
+	// Looking for matches using paired Myers and/or clipping - low error range
 	// Try rescue pairs by LevMyers and clipping search in mapping regions
 	if (!close_found && !ignore_pair) {
 #ifdef MEASURE_PP_TIMES
@@ -1747,9 +1748,9 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 			close_mapping_pairs = std::move(myers_mapping_pairs);
 		}
 	}
-#pragma endregion
 
-#pragma region Region: Looking for matches using paired Myers and/or clipping - high error range
+	// **********************************
+	// Looking for matches using paired Myers and/or clipping - high error range
 	if (!close_found && !ignore_pair) {
 #ifdef MEASURE_PP_TIMES
 		thr_watch.StartTimer();
@@ -1775,9 +1776,9 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 			clipping_mapping_pairs.begin(), clipping_mapping_pairs.end(),
 			close_mapping_pairs.begin(), mapping_pair_t::compareByScoresDescending);
 	}
-#pragma endregion
 
-#pragma region Region: Checking global best SE mappings as a pair
+	// **********************************
+	// Checking global best SE mappings as a pair
 	// find best globally and check if it is close
 	if (!close_found && hits_se[0].size() && hits_se[1].size()) {
 		mapping_desc_t* bestHits[2];
@@ -1792,9 +1793,9 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 			close_found = true;
 		}
 	}
-#pragma endregion
 
-#pragma region Region: Looking for distant matches
+	// **********************************
+	// Looking for distant matches
 	// Check whether distant mapping is better than hits already found 
 	std::vector<mapping_pair_t> distant_mapping_pairs;
 	bool distant_found = false;
@@ -1811,9 +1812,9 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 	thr_watch.StopTimer();
 	part_times[8] += thr_watch.GetElapsedTime();
 #endif
-#pragma endregion
 
-#pragma region Region: Calculation of SE qualities
+	// **********************************
+	// Calculation of SE qualities
 #ifdef MEASURE_PP_TIMES
 	thr_watch.StartTimer();
 #endif
@@ -1832,14 +1833,15 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 	thr_watch.StopTimer();
 	part_times[9] += thr_watch.GetElapsedTime();
 #endif
-#pragma endregion
 
 	// If some paired-end mappings were found
 	MappingEvaluation pe_eval(params->mapq_mult, params->mapq_div);
 	std::vector<mapping_pair_t> mapping_pairs;
 	int pair_id = -1;
 	if (close_found || distant_found) {
-#pragma region Region: Merging found paired mapping
+
+		// **********************************
+		// Merging found paired mapping
 #ifdef MEASURE_PP_TIMES
 		thr_watch.StartTimer();
 #endif
@@ -1901,11 +1903,12 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 		thr_watch.StopTimer();
 		part_times[10] += thr_watch.GetElapsedTime();
 #endif
-#pragma endregion
+
 	}
 	// find single mappings if everything other fails	
 	else  {
-#pragma region Region: Finding best SE mappings
+		// ********************************** 
+		// Finding best SE mappings
 #ifdef MEASURE_PP_TIMES
 		thr_watch.StartTimer();
 #endif
@@ -1914,11 +1917,11 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 		thr_watch.StopTimer();
 		part_times[11] += thr_watch.GetElapsedTime();
 #endif
-#pragma endregion
+
 	}
 
 	bool filterPassed = params->filter.length() == 0; // if filter not specified - assume it is passed
-	bool mappings_removed = false;
+	//bool mappings_removed = false;
 
 #ifdef MEASURE_PP_TIMES
 	thr_watch.StartTimer();
@@ -1927,7 +1930,8 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 	// Store mapping results for pairs if there is at least one pair
 	if (mapping_pairs.size())
 	{
-#pragma region Region: Storing paired mapping
+		// **********************************
+		// Storing paired mapping
 		stored_mapped += 2;
 		bool first_pair = true;
 
@@ -2071,11 +2075,11 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 			stat_mapped_pe_pair_unq++;
 		else
 			stat_mapped_pe_pair_more++;
-#pragma endregion
 	}
 	else
 	{
-#pragma region Region: Storing SE mappings
+		// **********************************
+		// Storing SE mappings
 		// Store reads as mapped but unpaired
 		stored_unmapped += 2;
 
@@ -2201,15 +2205,14 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 			stat_mapped_pe_independent_single++;
 		else
 			stat_mapped_pe_independent_both++;
-#pragma endregion
 	}
 
 #ifdef MEASURE_PP_TIMES
 	thr_watch.StopTimer();
 	part_times[12] += thr_watch.GetElapsedTime();
 #endif
-
-#pragma region Region: Releasing cigars
+	// **********************************
+	// Releasing cigars
 	// clear all EXT-CIGARS
 	for (int i = 0; i < 2; ++i)
 		for (auto it = mapping_desc[i].begin(); it != mapping_desc[i].end(); ++it) {
@@ -2219,7 +2222,6 @@ void CSamGenerator::store_mapped_pair_reads(read_id_t read_id, uchar_t *id[2], u
 				hit.ext_cigar = nullptr; // to prevent multiple deallocations
 			}
 		}
-#pragma endregion
 }
 
 // ************************************************************************************

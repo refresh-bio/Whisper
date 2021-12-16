@@ -1378,8 +1378,8 @@ bool CMapper::reads_mapping_all_strata()
 		uint32_t prev_stage_major = (p - 1)->first;
 		uint32_t prev_stage_minor = (p - 1)->second;
 
-		uint32_t stage_id = (stage_major << 5) + stage_minor;
 #ifdef COLLECT_STATS
+		uint32_t stage_id = (stage_major << 5) + stage_minor;
 		objects.running_stats->Register(STAT_TIME_THR_BIN_READER_BASE + stage_id, "Thread time: bin reader " + StageDesc(stage_id), running_stats_t::totals);
 		objects.running_stats->Register(STAT_TIME_THR_BIN_WRITER_BASE + stage_id, "Thread time: bin writer " + StageDesc(stage_id), running_stats_t::totals);
 		objects.running_stats->Register(STAT_TIME_THR_MAPPING_CORE_BASE + stage_id, "Thread time: map. core  " + StageDesc(stage_id), running_stats_t::lists);
@@ -1660,8 +1660,8 @@ bool CMapper::reads_mapping_single_stage(uint32_t stage_major, uint32_t stage_mi
 		}
 	}
 
-	uint32_t stage_id = (stage_major << 5) + stage_minor + (sensitive_mode ? (1 << 10) : 0);
 #ifdef COLLECT_STATS
+	uint32_t stage_id = (stage_major << 5) + stage_minor + (sensitive_mode ? (1 << 10) : 0);
 	objects.running_stats->Register(STAT_TIME_THR_BIN_READER_BASE + stage_id, "Thread time: bin reader " + StageDesc(stage_id), running_stats_t::totals);
 	objects.running_stats->Register(STAT_TIME_THR_BIN_WRITER_BASE + stage_id, "Thread time: bin writer " + StageDesc(stage_id), running_stats_t::totals);
 	objects.running_stats->Register(STAT_TIME_THR_MAPPING_CORE_BASE + stage_id, "Thread time: map. core  " + StageDesc(stage_id), running_stats_t::lists);
@@ -1785,9 +1785,8 @@ bool CMapper::reads_mapping_stage_range(uint32_t stage_major_from, uint32_t stag
 		uint32_t prev_stage_major = (p - 1)->first;
 		uint32_t prev_stage_minor = (p - 1)->second;
 
-		uint32_t stage_id = (stage_major << 5) + stage_minor;
-
 #ifdef COLLECT_STATS
+		uint32_t stage_id = (stage_major << 5) + stage_minor;
 		objects.running_stats->Register(STAT_TIME_THR_BIN_READER_BASE + stage_id, "Thread time: bin reader " + StageDesc(stage_id), running_stats_t::totals);
 		objects.running_stats->Register(STAT_TIME_THR_BIN_WRITER_BASE + stage_id, "Thread time: bin writer " + StageDesc(stage_id), running_stats_t::totals);
 		objects.running_stats->Register(STAT_TIME_THR_MAPPING_CORE_BASE + stage_id, "Thread time: map. core  " + StageDesc(stage_id), running_stats_t::lists);

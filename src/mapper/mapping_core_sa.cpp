@@ -197,8 +197,8 @@ uint32_t CMappingCore::search_in_unknown_range_dir_and_rc(uchar_t* pattern_ptr, 
 {
 	uint32_t i = start_SA_index;
 	uint32_t cur_match = 0;
-	int32_t cur_indel = 0;
-	bool best_left_side_indel = false;
+	//int32_t cur_indel = 0;
+	//bool best_left_side_indel = false;
 	uint32_t best_match = max_mismatches + 1;
 	int32_t  cmp = 0;
 
@@ -216,7 +216,7 @@ uint32_t CMappingCore::search_in_unknown_range_dir_and_rc(uchar_t* pattern_ptr, 
 	{
 		candidate_mapping_t candidate_mapping;
 
-		cur_indel = 0;
+		//cur_indel = 0;
 		cur_match = max_mismatches + 1;
 
 		//-------------------------------DIR GENOME ----------------------------------------
@@ -258,7 +258,7 @@ uint32_t CMappingCore::search_in_unknown_range_dir_and_rc(uchar_t* pattern_ptr, 
 			if (sensitive_mode && enable_mapping_indels)
 			{
 				ref_pos_t examined_start_pos = sa_part[i] - start_pos;
-				uint32_t examined_size = pattern_len + 2 * max_approx_indel_len;
+				//uint32_t examined_size = pattern_len + 2 * max_approx_indel_len;
 				candidate_mapping_t candidate_mapping_indel;
 
 				if(indel_matching_dir->Match(examined_start_pos, max_approx_indel_len, start_pos, end_pos-start_pos, max_mismatches, candidate_mapping_indel))
@@ -310,8 +310,8 @@ uint32_t CMappingCore::search_in_unknown_range_dir_and_rc(uchar_t* pattern_ptr, 
 			if (sensitive_mode && enable_mapping_indels)
 			{
 				ref_pos_t examined_start_pos = ref_size - sa_part[i] - pattern_len + start_pos;
-				uint32_t examined_size = pattern_len + 2 * max_approx_indel_len;
-
+				//uint32_t examined_size = pattern_len + 2 * max_approx_indel_len;
+				
 				candidate_mapping_t candidate_mapping_indel;
 
 				if (indel_matching_rc->Match(examined_start_pos, max_approx_indel_len, pattern_len - end_pos, end_pos - start_pos, max_mismatches, candidate_mapping_indel))
@@ -362,9 +362,9 @@ uint32_t CMappingCore::search_in_known_range_dir_and_rc(uchar_t* pattern_ptr, uc
 {
 	uint32_t i = start_SA_index;
 	uint32_t cur_match = 0;
-	int32_t cur_indel = 0;
+	//int32_t cur_indel = 0;
 	uint32_t best_match = max_mismatches + 1;
-	bool best_left_side_indel = false;
+	//bool best_left_side_indel = false;
 
 	bool is_short_read = pattern_len < min_read_len;
 
@@ -382,7 +382,7 @@ uint32_t CMappingCore::search_in_known_range_dir_and_rc(uchar_t* pattern_ptr, uc
 		{
 			candidate_mapping_t candidate_mapping;
 
-			cur_indel = 0;
+			//cur_indel = 0;
 			cur_match = max_mismatches + 1;
 
 			//-------------------------------DIR GENOME ----------------------------------------------------
@@ -420,11 +420,7 @@ uint32_t CMappingCore::search_in_known_range_dir_and_rc(uchar_t* pattern_ptr, uc
 				if (sensitive_mode && enable_mapping_indels)
 				{
 					ref_pos_t examined_start_pos = sa_part[i] - start_pos;
-					uint32_t examined_size = pattern_len + 2 * max_approx_indel_len;
-
-					bool left_side_indel;
-					int32_t del_size;
-					uint32_t no_mismatches;
+					//uint32_t examined_size = pattern_len + 2 * max_approx_indel_len;
 
 					candidate_mapping_t candidate_mapping_indel;
 
@@ -475,11 +471,7 @@ uint32_t CMappingCore::search_in_known_range_dir_and_rc(uchar_t* pattern_ptr, uc
 					//				(this_hit.raw_pos - distanceThreshold + sequence_len[!r]) :
 
 					ref_pos_t examined_start_pos = ref_size - sa_part[i] - pattern_len + start_pos;
-					uint32_t examined_size = pattern_len + 2 * max_approx_indel_len;
-
-					bool left_side_indel;
-					int32_t del_size;
-					uint32_t no_mismatches;
+					//uint32_t examined_size = pattern_len + 2 * max_approx_indel_len;
 
 					candidate_mapping_t candidate_mapping_indel;
 

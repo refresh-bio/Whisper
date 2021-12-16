@@ -24,9 +24,7 @@
 #include "../common/utils.h"
 #include "edit_dist.h"
 #include "reads.h"
-#pragma warning (disable: 26495 26451 6385)
-#include "../libs/vectorclass.h"
-#pragma warning (default: 26495 26451 6385)
+#include "../mapper/vector_utils.h"
 #include "LevMyers.h"
 #include "indels.h"
 #include <vector>

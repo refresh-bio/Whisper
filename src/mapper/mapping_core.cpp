@@ -185,7 +185,6 @@ CMappingCore::CMappingCore(CParams *params, CObjects *objects, uint32_t _stage_i
 	levMyers128->setReference(reference->GetData(), sa_dir->GetRefSize(), start_pos);
 	levMyers256->setReference(reference->GetData(), sa_dir->GetRefSize(), start_pos);
 
-	int max_text_len = 16384;
 	indel_matching_dir = new CIndelMatching(params);
 	indel_matching_dir->SetReference(reference->GetData(), 0, 0);
 	indel_matching_rc = new CIndelMatching(params);
@@ -311,8 +310,8 @@ void CMappingCore::operator()()
 			}
 			bin_watch.StopTimer();
 
+	#ifdef COLLECT_STATS
 			uint32_t stat_id = STAT_BIN_TIMES + stage_id * 1000 + bin.bin_id;
-#ifdef COLLECT_STATS
 			running_stats->Register(stat_id, "Bin times " + StageDesc(stage_id) + " : " + prefixes[bin.bin_id] + " : ", running_stats_t::totals);
 			running_stats->AddTotals(stat_id, bin_watch.GetElapsedTime());
 #endif

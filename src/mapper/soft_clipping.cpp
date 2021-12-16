@@ -8,8 +8,9 @@
 // Date    : see defs.h
 // License : GNU GPL 3
 // *******************************************************************************************
-
+#ifdef _MSC_VER
 #pragma warning (disable: 6263 6255)
+#endif
 #include "soft_clipping.h"
 #include "simd_utils.h"
 #include <algorithm>
@@ -38,6 +39,8 @@ CSoftClipping::CSoftClipping(uint32_t _max_query_len, uint32_t _max_text_len, ui
 	ref_ptr = nullptr;
 	ref_size = 0;
 	seq_len = 0;
+
+	ptr_PrefetchDecompressed = nullptr;
 
 	uint32_t ht_size;
 	for (ht_size = 256; ht_size / max_query_len < 50; ht_size *= 2)
@@ -112,7 +115,7 @@ CSoftClipping::CSoftClipping(uint32_t _max_query_len, uint32_t _max_text_len, ui
 		ptr_PrefetchDecompressed = PrefetchDecompressed128<instruction_set_t::avx>;
 		break;
 	case instruction_set_t::avx2:
-		ptr_PrefetchDecompressed = PrefetchDecompressed256;
+		ptr_PrefetchDecompressed = PrefetchDecompressed256<instruction_set_t::avx2>;
 		break;
 	}
 }

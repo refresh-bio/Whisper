@@ -8,8 +8,9 @@
 // Date    : see defs.h
 // License : GNU GPL 3
 // *******************************************************************************************
-
+#ifdef _MSC_VER
 #pragma warning(disable : 6255)
+#endif
 
 #include "indels.h"
 
@@ -100,8 +101,8 @@ CIndelMatching::CIndelMatching(CParams *params)
 		ptr_PrefetchDecompressed = PrefetchDecompressed128<instruction_set_t::avx>;
 		break;
 	case instruction_set_t::avx2:
-		ptr_CountMismatches = CountMismatches256;
-		ptr_PrefetchDecompressed = PrefetchDecompressed256;
+		ptr_CountMismatches = CountMismatches256<instruction_set_t::avx2>;
+		ptr_PrefetchDecompressed = PrefetchDecompressed256<instruction_set_t::avx2>;
 		break;
 	}
 }
@@ -161,13 +162,13 @@ bool CIndelMatching::Match(ref_pos_t ref_pos, uint32_t max_indel_size, uint32_t 
 
 	prefetch_genome(ref_pos - max_indel_size, text_size);
 
-#pragma region Region: Verificatgion of fixed segment
+	// **********************************
+	// Verificatgion of fixed segment
 	for (uint32_t i = 0; i < fixed_segment_size; ++i)
 		if (query[fixed_segment_pos + i] != genome[max_indel_size + fixed_segment_pos + i])
 			return false;
-#pragma endregion
 
-#pragma region Region: Evaluate left part
+	// **********************************
 	// Evaluate left part
 	uint32_t no_left_mismatches_raw = 0;
 	double clipping_cost = clipping_score;
@@ -228,9 +229,8 @@ bool CIndelMatching::Match(ref_pos_t ref_pos, uint32_t max_indel_size, uint32_t 
 			}
 		}
 	}
-#pragma endregion
 
-#pragma region Region: Evaluate right part
+	// **********************************
 	// Evaluate right part
 	uint32_t no_right_mismatches_raw = 0;
 	clipping_cost = clipping_score;
@@ -291,9 +291,9 @@ bool CIndelMatching::Match(ref_pos_t ref_pos, uint32_t max_indel_size, uint32_t 
 			}
 		}
 	}
-#pragma endregion
 
-#pragma region Case: indel - mismatches
+	// **********************************
+	// Case: indel - mismatches
 	if (left_indel_found && no_left_mismatches_indel + no_right_mismatches_raw < max_no_mismatches)
 	{
 		double act_cost = best_left_cost + (query_len - fixed_segment_pos - no_right_mismatches_raw) * match_score + no_right_mismatches_raw * mismatch_score;
@@ -312,9 +312,9 @@ bool CIndelMatching::Match(ref_pos_t ref_pos, uint32_t max_indel_size, uint32_t 
 			candidate_mapping.calc_penalty();
 		}
 	}
-#pragma endregion
-
-#pragma region Case: mismatches - indel
+		
+	// **********************************
+	// Case: mismatches - indel
 	if (right_indel_found && no_left_mismatches_raw + no_right_mismatches_indel < max_no_mismatches)
 	{
 		double act_cost = best_right_cost + (fixed_segment_pos + fixed_segment_size - no_left_mismatches_raw) * match_score + no_left_mismatches_raw * mismatch_score;
@@ -330,9 +330,9 @@ bool CIndelMatching::Match(ref_pos_t ref_pos, uint32_t max_indel_size, uint32_t 
 			candidate_mapping.calc_penalty();
 		}
 	}
-#pragma endregion
 
-#pragma region Case: indel - indel
+	// **********************************
+	// Case: indel - indel
 	if (left_indel_found && right_indel_found && no_left_mismatches_indel + no_right_mismatches_indel < max_no_mismatches)
 	{
 		double act_cost = best_left_cost + best_right_cost + fixed_segment_size * match_score;
@@ -358,9 +358,9 @@ bool CIndelMatching::Match(ref_pos_t ref_pos, uint32_t max_indel_size, uint32_t 
 			candidate_mapping.calc_penalty();
 		}
 	}
-#pragma endregion
 
-#pragma region Case: clipping - mismatches
+	// **********************************
+	// Case: clipping - mismatches
 	if (best_no_left_clipped > 0 && best_no_left_mismatches_clipped + no_right_mismatches_raw < rescale_max_no_mismatches(query_len - best_no_left_clipped, max_no_mismatches))
 	{
 		double act_cost = best_left_clipping_cost + (query_len - fixed_segment_pos - no_right_mismatches_raw) * match_score + no_right_mismatches_raw * mismatch_score;
@@ -376,9 +376,9 @@ bool CIndelMatching::Match(ref_pos_t ref_pos, uint32_t max_indel_size, uint32_t 
 			candidate_mapping.calc_penalty();
 		}
 	}
-#pragma endregion
 
-#pragma region Case: mismatches - clipping
+	// **********************************
+	// Case: mismatches - clipping
 	if (best_no_right_clipped > 0 && no_left_mismatches_raw + best_no_right_mismatches_clipped < rescale_max_no_mismatches(query_len - best_no_right_clipped, max_no_mismatches))
 	{
 		double act_cost = best_right_clipping_cost + (fixed_segment_pos + fixed_segment_size - no_left_mismatches_raw) * match_score + no_left_mismatches_raw * mismatch_score;
@@ -394,9 +394,9 @@ bool CIndelMatching::Match(ref_pos_t ref_pos, uint32_t max_indel_size, uint32_t 
 			candidate_mapping.calc_penalty();
 		}
 	}
-#pragma endregion
 
-#pragma region Case: clipping - indel
+	// **********************************
+	// Case: clipping - indel
 	if (best_no_left_clipped > 0 && right_indel_found && best_no_left_mismatches_clipped + no_right_mismatches_indel < rescale_max_no_mismatches(query_len - best_no_left_clipped, max_no_mismatches))
 	{
 		double act_cost = best_left_clipping_cost + best_right_cost + fixed_segment_size * match_score;
@@ -413,9 +413,9 @@ bool CIndelMatching::Match(ref_pos_t ref_pos, uint32_t max_indel_size, uint32_t 
 			candidate_mapping.calc_penalty();
 		}
 	}	
-#pragma endregion
 
-#pragma region Case: indel - clipping
+	// **********************************
+	// Case: indel - clipping
 	if (best_no_right_clipped > 0 && left_indel_found && best_no_right_mismatches_clipped + no_left_mismatches_indel < rescale_max_no_mismatches(query_len - best_no_right_clipped, max_no_mismatches))
 	{
 		double act_cost = best_right_clipping_cost + best_left_cost + fixed_segment_size * match_score;
@@ -436,9 +436,9 @@ bool CIndelMatching::Match(ref_pos_t ref_pos, uint32_t max_indel_size, uint32_t 
 			candidate_mapping.calc_penalty();
 		}
 	}
-#pragma endregion
 
-#pragma region Case: clipping - clipping
+	// **********************************
+	// Case: clipping - clipping
 	if (best_no_left_clipped > 0 && best_no_right_clipped > 0 && 
 		best_no_left_mismatches_clipped + best_no_right_mismatches_clipped < rescale_max_no_mismatches(query_len - best_no_left_clipped - best_no_right_clipped, max_no_mismatches))
 	{
@@ -455,7 +455,7 @@ bool CIndelMatching::Match(ref_pos_t ref_pos, uint32_t max_indel_size, uint32_t 
 			candidate_mapping.calc_penalty();
 		}
 	}
-#pragma endregion
+
 
 	return candidate_mapping.type != mapping_type_t::none;
 }
@@ -504,7 +504,7 @@ pair<uint32_t, uint32_t> CIndelMatching::calc_mismatches_with_indel(uint32_t gen
 	int start_pos = left_margin ? min_side_size : 0;
 	int end_pos = stats_size - (left_margin ? 0: min_side_size);
 
-	int del_size = (int)text_size - (int)query_size;
+	//int del_size = (int)text_size - (int)query_size;
 
 	v_left_mismatches.resize(stats_size + 1ull);
 	v_right_mismatches.resize(stats_size + 1ull);

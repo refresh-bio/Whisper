@@ -1,0 +1,58 @@
+name: GitHub Actions CI
+
+on:
+  push:
+    branches: [ master ]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+jobs:
+
+  
+  linux-remote:
+    name: Linux test (remote)
+    runs-on: ubuntu-latest
+    env: 
+      EXE: ./src/whisper
+      EXE_INDEX: ./src/whisper-index
+      REFERENCE: ./example/GCF_904425475.1_MG1655_genomic.fna
+      FASTQ_1: ./example/SRR10051130_10k_1.fastq
+      FASTQ_2: ./example/SRR10051130_10k_2.fastq
+      SAM_PE: ./example/out-pe.sam
+      SAM_SE: ./example/out-se.sam
+
+ 
+    steps:
+    - uses: actions/checkout@v2
+    - name: make
+      run: make -j2 -C ./src
+    
+    - name: indexing
+      run: |
+        mkdir temp
+        mkdir index
+        $EXE_INDEX ecoli $REFERENCE ./index ./temp
+           
+    - name: mapping PE
+      run: |
+        $EXE -t 1 -rp -out out-pe ./index/ecoli $FASTQ_1 $FASTQ_2
+        diff $SAM_PE <(tail -n+4 out-pe.sam)
+        
+  #  - name: mapping SE
+  #    run: |
+  #      $EXE -t 1 -rs -out out-se ./index/ecoli $FASTQ_1
+  #      cmp $SAM_SE out-se.sam
+        
+    
+  #macos-remote:
+  #  name: macOS build (remote)
+  #  runs-on: macOS-latest
+
+  #  steps:
+  #  - uses: actions/checkout@v2
+  #  - name: make
+  #    run: make -j2 -C ./src
+
+ 
+          

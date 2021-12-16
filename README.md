@@ -1,6 +1,9 @@
 # Whisper2
 
 [![GitHub downloads](https://img.shields.io/github/downloads/refresh-bio/whisper/total.svg?style=flag&label=GitHub%20downloads)](https://github.com/refresh-bio/Whisper/releases)
+[![GitHub Actions CI](../../actions/workflows/main.yml/badge.svg)](../../actions/workflows/main.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 
 ## Quick start
 
@@ -23,7 +26,7 @@ mkdir temp
 ./Whisper/src/whisper-index ecoli GCF_904425475.1_MG1655_genomic.fna ./index ./temp
 
 # map reads to the reference genome and store the results in mappings.sam
-./Whisper/src/whisper -rp -out mappings ./index/ecoli  SRR10051130_1.fastq.gz SRR10051130_2.fastq.gz
+./Whisper/src/whisper -rp -out mappings -temp ./temp ./index/ecoli  SRR10051130_1.fastq.gz SRR10051130_2.fastq.gz
 ```
 
 Note, that Whisper was optimized for processing data from sequencing large samples with high coverage (e.g. human). 
@@ -164,6 +167,6 @@ readsC_1;readsC_2
 [Deorowicz, S., Debudaj-Grabysz, A., Gudyś, A., Grabowski, S. (2018) Whisper: Read sorting allows robust mapping of sequencing data, Bioinformatics, 35(12):2043–2050](https://academic.oup.com/bioinformatics/advance-article-abstract/doi/10.1093/bioinformatics/bty927/5165374?redirectedFrom=fulltext)
 
 
-[Deorowicz, S., Gudyś, A. (2019) Whisper 2: indel-sensitive short read mapping, biorXiv,https://doi.org/10.1101/2019.12.18.881292](https://doi.org/10.1101/2019.12.18.881292) 
+[Deorowicz, S., Gudyś, A. (2021) Whisper 2: Indel-sensitive short read mapping, SoftwareX, 14:100692](https://doi.org/10.1016/j.softx.2021.100692) 
 
  

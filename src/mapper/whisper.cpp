@@ -343,7 +343,9 @@ bool parse_parameters(int argc, char **argv)
 			}
 
 		in.close();
-		random_shuffle(cmd_params.input_file_names.begin(), cmd_params.input_file_names.end());
+		
+		std::mt19937 gen;
+		shuffle(cmd_params.input_file_names.begin(), cmd_params.input_file_names.end(), gen);
 	}
 
 	// Prepare command line for SAM

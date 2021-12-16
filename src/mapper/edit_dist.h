@@ -14,9 +14,7 @@
 #define _EDIT_DIST_H
 
 #include "../common/defs.h"
-#pragma warning (disable: 26495 26451 6385)
-#include "../libs/vectorclass.h"
-#pragma warning (default: 26495 26451 6385)
+#include "../mapper/vector_utils.h"
 
 class CEditDist 
 {

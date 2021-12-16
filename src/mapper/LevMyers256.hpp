@@ -11,9 +11,7 @@
 
 
 #include "LevMyers256.h"
-#pragma warning (disable: 26495 26451 6385)
 #include "vector_utils.h"
-#pragma warning (default: 26495 26451 6385)
 #include "../common/types.h"
 
 #include <iostream>
@@ -94,8 +92,8 @@ bool LevMyers256<instruction_set>::dynamicProgramming(
 	uint64_t red_m_mask = 1ull << (red_m % 64);
 	uint64_t red_m_word = red_m / 64;
 
-	int middle_point_in_ref = (max_distance_in_ref + seq_len) / 2;
-	int best_dist_from_middle = max_distance_in_ref + seq_len;		// large value
+	//int middle_point_in_ref = (max_distance_in_ref + seq_len) / 2;
+	//int best_dist_from_middle = max_distance_in_ref + seq_len;		// large value
 
 	uint32_t min_ed = seq_len;
 	uint32_t min_ed_pos = 0;
@@ -117,12 +115,12 @@ bool LevMyers256<instruction_set>::dynamicProgramming(
 									// Genome prefetch
 	uchar_t *ptr = genome_prefetch;
 	uchar_t *genome_ptr = ref_ptr + (ref_pos >> 1);
-	uint32_t text_len_div2 = (max_distance_in_ref + 3) / 2;
+	//uint32_t text_len_div2 = (max_distance_in_ref + 3) / 2;
 
 	*ptr++ = 7;			// No symbol
 	*ptr++ = 7;			// No symbol
 	*ptr++ = 7;			// No symbol
-	PrefetchDecompressed256(ptr, genome_ptr, max_distance_in_ref + 3, ref_pos & 1);
+	PrefetchDecompressed256<instruction_set>(ptr, genome_ptr, max_distance_in_ref + 3, ref_pos & 1);
 	ptr = genome_prefetch;
 
 	simd256_t prev_D0 = bp256_M[0][0].D0;
