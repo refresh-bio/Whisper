@@ -68,7 +68,7 @@ size_t CountMismatches256(uchar_t* p, uchar_t* q, size_t size)
 	size_t r = 0;
 
 	r += CountMismatches128<instruction_set>(p, q, rest);
-	p + rest;
+	p += rest;
 	q += rest;
 
 	for (size -= rest; size; p += 32, q += 32, size -= 32)

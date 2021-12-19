@@ -78,7 +78,7 @@ size_t CountMismatches128(uchar_t* p, uchar_t* q, size_t size)
 	size_t r = 0;
 
 	r += CountMismatches(p, q, rest);
-	p + rest;
+	p += rest;
 	q += rest;
 
 	for (size -= rest; size; p += 16, q += 16, size -= 16)

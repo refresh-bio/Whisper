@@ -708,7 +708,7 @@ void CSoftClipping::clipIllegalPositions(mapping_desc_t& mapping, const scoring_
 			if (*in == '^')
 			{
 				in += 2;
-				+i_ref;
+				++i_ref;
 			}
 			else if (*in == '#')
 			{

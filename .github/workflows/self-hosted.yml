@@ -37,10 +37,10 @@ jobs:
         $EXE -t 1 -rp -out out-pe -temp ./temp ./index/ecoli $FASTQ_1 $FASTQ_2
         diff $SAM_PE <(tail -n+4 out-pe.sam)
               
-  #  - name: single-end mapping
-  #    run: |
-  #      $EXE -rs -out out-se ./index/ecoli $FASTQ_1
-  #      cmp $SAM_SE out-se.sam
+    - name: single-end mapping
+      run: |
+        $EXE -t 1 -rs -out out-se ./index/ecoli $FASTQ_1
+        diff $SAM_SE <(tail -n+4 out-se.sam)
   
   ecoli-full:
     needs: ecoli-toy
@@ -54,11 +54,23 @@ jobs:
       SAM_SE: ../../../../out/ecoli-se.sam
     
     steps:
-
-    - name: paired-end mapping
+    - name: Paired-end mapping
       run: |
         $EXE -t 1 -rp -out ecoli-pe -temp ./temp ./index/ecoli $FASTQ_1 $FASTQ_2
-        diff $SAM_PE <(tail -n+4 ecoli-pe.sam)
+        
+    - name: Comparison
+      run: |
+        tail -n+4 ecoli-pe.sam > ecoli-pe-noheader.sam
+        cmp $SAM_PE ecoli-pe-noheader.sam
+        
+    - name: Single-end mapping
+      run: |
+        $EXE -t 1 -out ecoli-se -temp ./temp ./index/ecoli $FASTQ_1
+        
+    - name: Comparison
+      run: |
+        tail -n+4 ecoli-se.sam > ecoli-se-noheader.sam
+        cmp $SAM_SE ecoli-se-noheader.sam
            
   hg001-mapping:
     needs: ecoli-full

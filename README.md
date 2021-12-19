@@ -26,7 +26,7 @@ mkdir temp
 ./Whisper/src/whisper-index ecoli GCF_904425475.1_MG1655_genomic.fna ./index ./temp
 
 # map reads to the reference genome and store the results in mappings.sam
-./Whisper/src/whisper -rp -out mappings -temp ./temp ./index/ecoli  SRR10051130_1.fastq.gz SRR10051130_2.fastq.gz
+./Whisper/src/whisper -rp -out mappings -temp ./temp/ ./index/ecoli  SRR10051130_1.fastq.gz SRR10051130_2.fastq.gz
 ```
 
 Note, that Whisper was optimized for processing data from sequencing large samples with high coverage (e.g. human). 

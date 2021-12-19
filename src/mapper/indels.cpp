@@ -524,6 +524,7 @@ pair<uint32_t, uint32_t> CIndelMatching::calc_mismatches_with_indel(uint32_t gen
 	p = &genome[(int64_t)genome_left_pos + text_size - 1];
 	q = &query[query_left_pos + (int64_t)query_size - 1];
 	dest = v_right_mismatches.begin() + stats_size;
+#if 0
 	*dest-- = 0;
 
 	prev_val = 0;
@@ -532,6 +533,18 @@ pair<uint32_t, uint32_t> CIndelMatching::calc_mismatches_with_indel(uint32_t gen
 		*dest = prev_val + (*p-- != *q--);
 		prev_val = *dest--;
 	}
+#endif
+
+	*dest = 0;
+
+	prev_val = 0;
+	for (uint32_t i = 1; i <= stats_size; ++i)
+	{
+		--dest;
+		*dest = prev_val + (*p-- != *q--);
+		prev_val = *dest;
+	}
+
 
 	int best_no_mismatches = query_len + 1;
 	int best_indel_pos = 0;

@@ -39,10 +39,10 @@ jobs:
         $EXE -t 1 -rp -out out-pe ./index/ecoli $FASTQ_1 $FASTQ_2
         diff $SAM_PE <(tail -n+4 out-pe.sam)
         
-  #  - name: mapping SE
-  #    run: |
-  #      $EXE -t 1 -rs -out out-se ./index/ecoli $FASTQ_1
-  #      cmp $SAM_SE out-se.sam
+    - name: mapping SE
+      run: |
+        $EXE -t 1 -rs -out out-se ./index/ecoli $FASTQ_1
+        diff $SAM_SE <(tail -n+4 out-se.sam)
         
     
   #macos-remote:

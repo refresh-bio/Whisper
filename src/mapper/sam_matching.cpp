@@ -81,7 +81,7 @@ void CSamGenerator::generate_unique_hits(std::vector<mapping_desc_t>& mapping_de
 
 			// replace current with best
 			if (best != a) {
-				*a = *best;
+				**a = **best;
 			}
 
 			for (auto p = std::next(a); p != b; ++p)
