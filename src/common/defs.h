@@ -31,6 +31,7 @@
 
 //#define ENABLE_VCF_VARIANTS
 
+#include <cstdint>
 #include <string>
 using namespace std;
 
